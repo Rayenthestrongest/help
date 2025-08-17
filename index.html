@@ -727,60 +727,47 @@
       // Status is updated via onStatusUpdate
     });
 
-    on('#exportBtn','click',async function(){
+    // List existing backups from the main process
+    async function refreshBackupsList(){
+      const listEl = document.getElementById('backupsList');
+      if(!listEl) return;
+      listEl.innerHTML = 'Chargement…';
       try{
-        const rawData = localStorage.getItem('pass_j_data') || '{}';
-        const fileName = getActiveFileName();
-        setStatus('Export en cours...');
-        const result = await window.electronAPI.exportNow(rawData, fileName);
-          if (result && result.ok) {
-            // Charger les données importées dans l'app
-            const raw = (result.data === undefined || result.data === null) ? '{}' : result.data;
-            let imported;
-            // Étape 1 : parsing JSON (erreur claire si invalide)
-            try {
-              imported = (typeof raw === 'string') ? JSON.parse(raw) : raw;
-            } catch (parseErr) {
-              console.error('Import parse error:', parseErr, 'raw=', raw);
-              setStatus('Erreur import (JSON invalide) : ' + (parseErr && parseErr.message ? parseErr.message : 'Format incorrect'));
-              return;
-            }
-            // Étape 2 : appliquer les données à l'app (erreur distincte si ça casse)
-            try {
-              Store.data = imported;
-              Store.snapshot && Store.snapshot();
-              renderSubjects();
-              renderPresets();
-              refreshAll();
-              setStatus('Import terminé. (Nouveau fichier de sauvegarde actif)');
-              try{ localStorage.setItem('pass_j_data', JSON.stringify(Store.data)); }catch(e){}
-              if(result.file) { let fileName = result.file.split(/\\|\//).pop(); setActiveFileName(fileName); }
-            } catch (appErr) {
-              console.error('Import apply error:', appErr);
-              setStatus('Erreur application import: ' + (appErr && appErr.message ? appErr.message : String(appErr)));
-            }
-    const listEl = document.getElementById('backupsList');
-    if(!listEl) return;
-    listEl.innerHTML = 'Chargement…';
-    try{
-      const res = await window.electronAPI.listBackups();
-      if(res && res.ok){
-        if(!res.files || !res.files.length){ listEl.innerHTML = '<div class="hint">Aucun backup trouvé.</div>'; return }
-        listEl.innerHTML = '';
-        res.files.forEach(function(f){
-          const row = document.createElement('div');
-          row.className = 'item';
-          row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems='center'; row.style.gap='8px'; row.style.padding='6px';
-          const lbl = document.createElement('div'); lbl.textContent = f; lbl.style.flex='1'; lbl.style.overflow='hidden'; lbl.style.textOverflow='ellipsis';
-          const chk = document.createElement('input'); chk.type='radio'; chk.name='backup-select'; chk.value=f;
-          row.appendChild(lbl); row.appendChild(chk);
-          listEl.appendChild(row);
-        });
-      } else {
-        listEl.innerHTML = '<div class="hint">Erreur: '+(res && res.error?res.error:'Erreur')+'</div>';
+        const res = await window.electronAPI.listBackups();
+        if(res && res.ok){
+          if(!res.files || !res.files.length){
+            listEl.innerHTML = '<div class="hint">Aucun backup trouvé.</div>';
+            return;
+          }
+          listEl.innerHTML = '';
+          res.files.forEach(function(f){
+            const row = document.createElement('div');
+            row.className = 'item';
+            row.style.display = 'flex';
+            row.style.justifyContent = 'space-between';
+            row.style.alignItems = 'center';
+            row.style.gap = '8px';
+            row.style.padding = '6px';
+            const lbl = document.createElement('div');
+            lbl.textContent = f;
+            lbl.style.flex = '1';
+            lbl.style.overflow = 'hidden';
+            lbl.style.textOverflow = 'ellipsis';
+            const chk = document.createElement('input');
+            chk.type = 'radio';
+            chk.name = 'backup-select';
+            chk.value = f;
+            row.appendChild(lbl);
+            row.appendChild(chk);
+            listEl.appendChild(row);
+          });
+        } else {
+          listEl.innerHTML = '<div class="hint">Erreur: '+(res && res.error?res.error:'Erreur')+'</div>';
+        }
+      }catch(e){
+        listEl.innerHTML = '<div class="hint">Erreur: '+String(e)+'</div>';
       }
-    }catch(e){ listEl.innerHTML = '<div class="hint">Erreur: '+String(e)+'</div>' }
-  }
+    }
 
   ready(function(){
     // Correction : forcer la fermeture de tous les overlays/modals au démarrage
@@ -820,6 +807,7 @@
     window.electronAPI.getStatus().then(s=>{ if(s){ if(document.getElementById('dirName')) document.getElementById('dirName').textContent = s.saveDir || 'Aucun'; if(document.getElementById('autoLast')) document.getElementById('autoLast').textContent = s.lastSaveISO?new Date(s.lastSaveISO).toLocaleString('fr-FR'):'Jamais'; if(document.getElementById('saveStatus')) document.getElementById('saveStatus').textContent = s.saveDir? 'Sauvegarde active':'Aucun dossier choisi'; } });
     refreshBackupsList();
   });
+}
 
   // Gestion des boutons de sauvegarde et dossiers
   ready(function(){
