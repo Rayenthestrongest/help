@@ -1,0 +1,16 @@
+{
+  "name": "methode-j-app",
+  "version": "1.1.2",
+  "description": "PASS · Méthode des J — Electron app (sauvegarde persistante + backups 5 min).",
+  "main": "main.js",
+  "author": "Rayen",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "npx electron-packager . MethodeJ --platform=win32 --arch=x64 --out=dist --overwrite"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-packager": "^17.1.2"
+  }
+}

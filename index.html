@@ -1,0 +1,1809 @@
+  
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <script>
+  // Système de sécurité : détection perte >20% et popup Danger
+  var lastGoodSize = 0;
+  var Danger = {
+    ask: function(cb, oldSize, newSize) {
+      var back = document.getElementById('dangerBack');
+      if (!back) return;
+      back.innerHTML = '';
+      back.style.display = 'flex';
+      requestAnimationFrame(function(){back.classList.add('show')});
+      var modal = document.createElement('div');
+      modal.className = 'modal danger-modal';
+      modal.style.maxWidth = '480px';
+      modal.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:18px;">
+          <div style="width:48px;height:48px;background:url('data:image/svg+xml;utf8,<svg fill=\'%23ef4444\' viewBox=\'0 0 24 24\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm1-4h-2V7h2v6z\'/></svg>') no-repeat center center;background-size:contain;"></div>
+          <div style="flex:1;">
+            <h2 style="color:#ef4444;margin:0 0 8px 0;font-size:1.3em;">Attention : Perte de données</h2>
+            <p style="margin:0 0 8px 0;font-size:1.08em;">La taille des données à sauvegarder a diminué de plus de <b style='color:#ef4444'>20%</b> sur le fichier actif.<br>Voulez-vous continuer ?</p>
+            <div style="background:#f9ecec;border-radius:6px;padding:8px 12px;margin:8px 0 0 0;font-size:1em;color:#c0392b;">
+              Ancienne taille : <b>${oldSize}</b> octets<br>
+              Nouvelle taille : <b>${newSize}</b> octets
+            </div>
+            <p style="margin-top:10px;font-size:0.95em;color:#888;">Cliquez sur <b>Ignorer et sauvegarder</b> pour continuer, ou <b>Créer un nouveau fichier</b> pour éviter d'écraser les données.</p>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:18px;">
+          <button class="btn success" id="dangerIgnore">Ignorer et sauvegarder</button>
+          <button class="btn warning" id="dangerNewFile">Créer un nouveau fichier</button>
+        </div>
+      `;
+      back.appendChild(modal);
+      function cleanup() { back.classList.remove('show'); setTimeout(function(){back.style.display='none'},200); }
+      modal.querySelector('#dangerIgnore').onclick = function(){ cleanup(); cb('continue'); };
+      modal.querySelector('#dangerNewFile').onclick = function(){ cleanup(); cb('newfile'); };
+    }
+  };
+  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PASS · Méthode des J (offline)</title>
+  <style>
+    :root{--bg:#0f1115;--muted:#161922;--muted-2:#1b2030;--card:#0f1320;--accent:#6EE7F9;--accent-2:#A78BFA;--green:#22c55e;--red:#ef4444;--text:#e6e9ef;--text-dim:#9aa3b2;--border:#22283a;--yellow:#f5d565;--shadow:0 10px 30px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.5);--radius:16px}
+    *{box-sizing:border-box}
+    html,body{height:100%;max-width:100%;overflow-x:hidden}
+    body{margin:0;background:linear-gradient(160deg,var(--bg),#0b0d12 60%);color:var(--text);font:500 15px/1.5 Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .app{display:grid;grid-template-rows:64px 1fr;min-height:100vh}
+    .topbar{position:sticky;top:0;background:rgba(15,17,21,.8);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;z-index:50}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px}
+    .dot{width:12px;height:12px;border-radius:12px;background:conic-gradient(from 180deg at 50% 50%, var(--accent), var(--accent-2));box-shadow:0 0 0 4px rgba(167,139,250,.15)}
+    .nav{display:flex;gap:8px;margin-left:16px;flex-wrap:wrap;min-width:0}
+    .tab{border:1px solid var(--border);background:linear-gradient(180deg,var(--muted),var(--muted-2));color:var(--text);padding:8px 12px;border-radius:12px;cursor:pointer;user-select:none;transition:transform .18s ease, background .3s, border .3s, box-shadow .3s}
+    .tab:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.35)}
+    .tab.active{border-color:transparent;background:linear-gradient(180deg,#1f2436,#141925);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),0 10px 30px rgba(0,0,0,.4)}
+    .spacer{flex:1}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{background:linear-gradient(180deg,#1c2232,#141a28);border:1px solid var(--border);padding:8px 10px;border-radius:12px;color:var(--text);cursor:pointer;transition:transform .18s ease, background .3s,border .3s,box-shadow .3s}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.35)}
+    .btn.ghost{background:transparent}
+    .btn.primary{background:linear-gradient(180deg,#1d3344,#132635);border-color:#254b63}
+    .btn.success{background:linear-gradient(180deg,#163924,#0f2d1b);border-color:#1e7c4a}
+    .btn.warning{background:linear-gradient(180deg,#3a2f17,#2a220f);border-color:#8a6b2b}
+    .seg{display:flex;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .seg button{all:unset;padding:8px 10px;cursor:pointer;background:linear-gradient(180deg,#171d2a,#141a25)}
+    .seg button.active{background:linear-gradient(180deg,#263149,#192033)}
+    .kpi{display:flex;gap:10px;align-items:center;border:1px dashed #2a3147;padding:8px 12px;border-radius:12px;color:var(--text-dim)}
+    .badge{margin-left:6px;display:inline-grid;place-items:center;height:16px;min-width:16px;padding:0 4px;border-radius:999px;background:linear-gradient(180deg,#67e8f9,#a78bfa);color:#0b1220;font-size:11px;font-weight:800}
+    .panel{padding:18px;display:none;animation:fade .25s ease}
+    .panel.active{display:block}
+    @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    .card{background:linear-gradient(180deg,#0e1424,#0a101a);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    .grid{display:grid;gap:12px}
+    .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    @media (max-width:1100px){.grid.cols-3{grid-template-columns:1fr 1fr}}
+    @media (max-width:800px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr}}
+    .item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,#121827,#0c111b)}
+    .chip{height:20px;min-width:20px;border-radius:10px}
+    .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:#121826;color:var(--text-dim)}
+    .cal-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+    .title{font-weight:800;letter-spacing:.2px}
+    .calendar{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:linear-gradient(180deg,#0c1220,#0a0f19);max-width:100%}
+    .month{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--border)}
+    .dow,.cell{border-right:1px solid var(--border)}
+    .dow:last-child,.cell:last-child{border-right:none}
+    .dow{padding:10px 8px;background:linear-gradient(180deg,#141a2a,#0f1420);color:var(--text-dim);text-transform:uppercase;font-size:12px;letter-spacing:.8px}
+    .cell{min-height:120px;border-top:1px solid var(--border);position:relative;padding:6px;transition:background .3s,color .3s}
+    .cell .date{position:absolute;top:6px;right:8px;font-size:12px;color:var(--text-dim)}
+    .cell.today{outline:2px dashed var(--yellow);outline-offset:-4px}
+    .cell.drag-over{outline:2px dashed var(--accent);outline-offset:-4px;background:#0f1628}
+    .events{display:flex;flex-direction:column;gap:6px;margin-top:18px}
+    .ev{position:relative;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:linear-gradient(180deg,#151b2b,#101626);border:1px solid var(--border);cursor:grab}
+    .ev:active{cursor:grabbing}
+    .ev .bar{width:4px;align-self:stretch;border-radius:2px}
+    .ev .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ev.done{filter:saturate(.3) brightness(.85)}
+    .ev .meta{color:var(--text-dim);font-size:12px}
+    .ev .check{margin-left:auto;width:20px;height:20px;border-radius:7px;border:1px solid #2a344f;display:grid;place-items:center;transition:all .2s;background:linear-gradient(180deg,#131a29,#0f1523)}
+    .ev .check svg{width:14px;height:14px;opacity:0;transform:scale(.8);transition:opacity .15s,transform .15s}
+    .ev .check.active{background:linear-gradient(180deg,#0f2c1d,#0a2116);border-color:#1d6b43;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+    .ev .check.active svg{opacity:1;transform:scale(1)}
+    .progress{height:6px;border-radius:6px;background:#0e1527;border:1px solid var(--border);overflow:hidden}
+    .progress>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0;transition:width .35s ease}
+    .progress-mini{height:6px;border-radius:4px;background:#0e1527;border:1px solid var(--border);margin-top:24px;margin-bottom:8px;overflow:hidden;position:relative;z-index:2}
+    .progress-mini>div{height:100%;background:linear-gradient(90deg,var(--bar-color-start, #22c55e),var(--bar-color-end, #22c55e));width:0;transition:all .35s ease}
+    .tooltip{position:fixed;pointer-events:none;background:#0d1220;border:1px solid var(--border);padding:8px 10px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;color:#9aa3b2;opacity:0;transform:translateY(-6px);transition:opacity .12s,transform .12s;z-index:60}
+    .fab{position:fixed;right:22px;bottom:22px;z-index:40}
+    .fab .btn{padding:14px 16px;border-radius:16px;font-weight:700}
+    .mode-selector{display:flex;gap:0;align-items:center;margin-left:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    .mode-selector .btn{min-width:120px;text-align:center;border:0}
+    .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:80;opacity:0;transition:all 0.25s ease}
+    .modal-back.show{opacity:1}
+    .modal{width:min(720px,92vw);background:linear-gradient(180deg,#0f1422,#0b101a);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);padding:16px;transform:scale(0.95);transition:transform 0.25s ease}
+    .modal-back.show .modal{transform:scale(1)}
+    .modal h3{margin:0 0 10px}
+    .row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;margin:8px 0}
+    .row input,.row select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text)}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:10px;border-bottom:1px solid var(--border)}
+    th{text-align:left;color:var(--text-dim);font-size:13px;text-transform:uppercase;letter-spacing:.6px}
+    tr:hover td{background:#0e1423}
+    .actions{display:flex;gap:6px}
+    .color-btn{width:40px;height:28px;border-radius:10px;border:1px solid var(--border);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+    .hint{color:var(--text-dim);font-size:13px}
+    .ctx{position:fixed;z-index:120;display:none;min-width:200px;background:linear-gradient(180deg,#0f1422,#0a0f19);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+    .ctx button{all:unset;display:block;width:100%;padding:10px 12px;cursor:pointer;color:var(--text);border-bottom:1px solid var(--border)}
+    .ctx button:last-child{border-bottom:none}
+    .ctx button:hover{background:#141b2d}
+    .timer{position:fixed;right:22px;bottom:92px;width:min(400px,92vw);display:none;z-index:120;background:linear-gradient(180deg,#0f1422,#0b101a);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+    .timer.dragging{opacity:.96;box-shadow:0 16px 40px rgba(0,0,0,.6);transition:none!important}
+    #timerDock.dragging{transition:none!important}
+    body.dragging-any *{user-select:none!important;cursor:grabbing!important}
+    .timer.fullscreen{position:fixed;inset:0;width:100%;height:100%;max-width:none;border-radius:0;display:flex;flex-direction:column;z-index:150}
+    .timer-header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#131a22,#0c111b);cursor:default}
+    .dot-sm{width:8px;height:8px;border-radius:8px}
+    .timer-title{font-weight:700}
+    .mode-selector{display:flex;gap:4px;margin-left:12px}
+    .mode-btn{font-size:12px;padding:4px 8px!important}
+    .mode-btn.active{background:linear-gradient(180deg,#263149,#192033)}
+    .timer-body{padding:16px;display:flex;flex-direction:column;gap:14px}
+    .timer.fullscreen .timer-body{overflow-y:auto}
+    .digits{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-size:56px;letter-spacing:1px;text-align:center;font-weight:800}
+    .timer.fullscreen .digits{font-size:72px;margin:40px 0}
+    .timer-actions{display:flex;gap:10px;margin-top:6px;justify-content:center}
+    .timer-actions .btn{min-width:140px;text-align:center;height:40px}
+    .digits{font-size:44px;text-align:center;letter-spacing:1px}
+    .time-setter{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 0;font-family:ui-monospace,monospace}
+    .time-setter input{width:68px;height:44px;text-align:center;padding:8px;border-radius:10px;border:1px solid var(--border);background:#0e1424;color:var(--text);font-family:inherit;font-size:18px}
+    .time-setter{display:flex;gap:6px;justify-content:center;align-items:center}
+    .mode-btn{background:linear-gradient(180deg,#171d2a,#141a25);border:1px solid var(--border)}
+    .mode-btn.active{background:linear-gradient(180deg,#263149,#192033);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+    .timer-notes{display:none;flex:1;flex-direction:column;margin-top:16px}
+    .notes-toolbar{display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
+    .notes-toolbar select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:#0e1424;color:var(--text)}
+    #notes-content{flex:1;width:100%;min-height:150px;padding:12px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text);resize:none;font-family:inherit;line-height:1.5}
+    .timer-tabs{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+
+    /* Stats toolbar theming */
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .toolbar select,.toolbar input[type=date]{padding:8px 10px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text)}
+    .toolbar select:focus,.toolbar input[type=date]:focus{outline:none;box-shadow:0 0 0 2px rgba(167,139,250,.25)}
+    /* Timer visual polish overrides */
+    .timer .btn{height:36px}
+    .timer .mode-btn{height:36px}
+    #timer .timer-presets{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+    #timer .timer-presets .btn{height:32px;padding:6px 10px;border-radius:10px}
+    .digits{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .tab-btn{flex:1}
+    .tab-btn.active{background:linear-gradient(180deg,#263149,#192033)}
+    .pill-mini{position:fixed;right:22px;bottom:22px;z-index:121;display:none}
+    .pill-mini .btn{padding:10px 12px;border-radius:999px;cursor:move}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+    .chart-wrap{padding:10px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,#0e1424,#0a101a)}
+
+    /* History table compact + ellipsis */
+    #panel-history .hist-table{table-layout:fixed}
+    #panel-history .hist-table th,#panel-history .hist-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #panel-history .hist-table th:nth-child(1){width:130px}
+    #panel-history .hist-table th:nth-child(2){width:120px}
+    #panel-history .hist-table th:nth-child(4){width:160px}
+    #panel-history .hist-table th:nth-child(5){width:80px}
+    .ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:inline-block;max-width:100%}
+    .chart-wrap canvas{display:block;width:100%}
+    .err{position:fixed;left:12px;right:12px;top:12px;z-index:9999;background:#331a1a;border:1px solid #7f1d1d;color:#fca5a5;border-radius:10px;padding:10px 12px;white-space:pre-wrap}
+    @media (max-width:640px){.topbar{gap:6px}.brand span{display:none}.row{grid-template-columns:1fr}.dow{font-size:11px}.cell{min-height:100px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand"><div class="dot"></div><span>PASS · Méthode des J</span></div>
+    <div class="nav" id="nav">
+      <div class="tab active" data-panel="agenda">Agenda</div>
+      <div class="tab" data-panel="matieres">Matières</div>
+      <div class="tab" data-panel="presets">Presets</div>
+      <div class="tab" data-panel="stats">Statistiques</div>
+      <div class="tab" data-panel="params">Paramètres</div>
+    </div>
+    <div class="spacer"></div>
+    on('#exportBtn','click',async function(){
+      if (window.electronAPI) {
+        try{
+          const rawData = localStorage.getItem('pass_j_data') || '{}';
+          const fileName = getActiveFileName();
+          setStatus('Export en cours...');
+          const result = await window.electronAPI.exportNow(rawData, fileName);
+          if (result && result.ok) setStatus('Export terminé.');
+          else setStatus(`Erreur export : ${result && result.error ? result.error : 'Erreur inconnue'}`);
+        }catch(e){ setStatus('Erreur export : '+(e&&e.message?e.message:String(e))); }
+      } else {
+        try {
+          const rawData = localStorage.getItem('pass_j_data') || '{}';
+          const fileName = getActiveFileName();
+          const blob = new Blob([rawData], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch(e) { setStatus('Erreur export : '+(e&&e.message?e.message:String(e))); }
+      }
+    });
+
+    // Import manuel -> use main process loader if available
+    on('#importBtn','click',async function(){
+      if(window.electronAPI){
+        setStatus('Import en cours...');
+        try{
+          const result = await window.electronAPI.importAndSetCurrent();
+          console.log('importAndSetCurrent ->', result);
+          if (result && result.ok) {
+            const raw = (result.data === undefined || result.data === null) ? '{}' : result.data;
+            let imported;
+            try {
+              imported = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            } catch (parseErr) {
+              console.error('Import parse error:', parseErr, 'raw=', raw);
+              setStatus('Erreur import (JSON invalide) : ' + (parseErr && parseErr.message ? parseErr.message : 'Format incorrect'));
+              return;
+            }
+            try {
+              Store.data = imported;
+              Store.snapshot && Store.snapshot();
+              renderSubjects();
+              renderPresets();
+              refreshAll();
+              setStatus('Import terminé. (Nouveau fichier de sauvegarde actif)');
+              try{ localStorage.setItem('pass_j_data', JSON.stringify(Store.data)); }catch(e){}
+              if(result.file) { let fileName = result.file.split(/\\|\//).pop(); setActiveFileName(fileName); }
+            } catch (appErr) {
+              console.error('Import apply error:', appErr);
+              setStatus('Erreur application import: ' + (appErr && appErr.message ? appErr.message : String(appErr)));
+            }
+          } else {
+            const errMsg = (result && result.error) ? result.error : 'Sélection annulée ou import interrompu.';
+            console.warn('import cancelled or failed:', errMsg);
+            setStatus('Import annulé ou erreur : ' + errMsg);
+          }
+        }catch(e){
+          console.error('Import handler exception:', e);
+          setStatus('Erreur import : '+(e&&e.message?e.message:String(e)));
+        }
+      } else {
+        setStatus('Fonctionnalité disponible uniquement dans l\'application de bureau.');
+      }
+    });
+        <tbody id="statsTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Historique des sessions -->
+    <div class="card" id="panel-history">
+      <h3>Historique des sessions</h3>
+      <div class="toolbar">
+        <select id="histSubject"></select>
+        <select id="histCourse"></select>
+        <select id="histJ"></select>
+        <select id="histSort">
+          <option value="date_desc">Date ↓</option>
+          <option value="date_asc">Date ↑</option>
+          <option value="dur_desc">Durée ↓</option>
+          <option value="dur_asc">Durée ↑</option>
+        </select>
+        <div class="spacer"></div>
+        <div class="pill" id="histCount">0 sessions</div>
+      </div>
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th style="width:130px">Date</th>
+            <th style="width:120px">Durée</th>
+            <th>Cours</th>
+            <th style="width:160px">Matière</th>
+            <th style="width:80px">J</th>
+          </tr>
+        </thead>
+        <tbody id="histTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-params">
+    <div class="grid cols-1">
+      <div class="card">
+        <h3>Sauvegarde locale (Electron)</h3>
+        <p class="hint">L'application de bureau gère la sauvegarde automatiquement dans le dossier configuré.</p>
+  <div class="row"><label>Dossier</label><span class="hint" id="dirName">Aucun</span></div>
+  <div class="row"><label>Fichier actif</label><span class="hint" id="activeFile">—</span></div>
+  <div class="row"><label>Dernière sauvegarde</label><span class="hint" id="autoLast">Jamais</span></div>
+  <div class="row"><label>Statut</label><span class="hint" id="saveStatus">Initialisation...</span></div>
+        <div class="actions">
+          <button class="btn primary" id="pickDir">Choisir le dossier…</button>
+        </div>
+        <div style="margin-top:10px" class="actions">
+          <button class="btn" id="exportBtn">Exporter maintenant</button>
+          <button class="btn" id="importBtn">Importer…</button>
+          <button class="btn warning" id="resetAll">Réinitialiser (tout effacer)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  </div>
+</div>
+
+<div class="modal-back" id="filtersBack">
+  <div class="modal">
+    <h3>Filtres</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="hint" style="margin-bottom:6px">Matières</div>
+        <div id="filtersSubjects" class="grid"></div>
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:6px">J</div>
+        <div id="filtersJ" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="filtersClear">Aucun</button>
+      <button class="btn" id="filtersAllSubs">Toutes les matières</button>
+      <button class="btn success" id="filtersApply">Appliquer</button>
+    </div>
+  </div>
+</div>
+
+<div class="fab"><button class="btn success" id="openCreate">＋ Nouveau cours</button></div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal">
+    <h3>Nouveau cours (génère les J automatiquement)</h3>
+    <div class="row"><label>Nom du cours</label><input id="courseName" placeholder="Ex: Chimie — Chapitre 3"></div>
+    <div class="row"><label>Date de départ (J0)</label><input id="courseDate" type="date"></div>
+    <div class="row"><label>Matière</label><select id="courseSubject"></select></div>
+    <div class="row"><label>Preset</label><select id="coursePreset"></select></div>
+    <div class="card" style="margin-top:8px"><div id="preview" class="hint">Aperçu des dates des J…</div></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelCreate">Annuler</button>
+      <button class="btn success" id="createCourse">Créer</button>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<div id="err"></div>
+<div id="ctx" class="ctx"></div>
+
+<!-- Modal Renommer -->
+<div class="modal-back" id="renameBack" style="display:none;z-index:200;">
+  <div class="modal" style="max-width:420px;">
+    <h3>Renommer le cours</h3>
+    <div style="margin:16px 0;">
+      <input type="text" id="renameInput" placeholder="Nouveau nom" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text);text-align:center;font-size:16px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="renameCancel">Annuler</button>
+      <button class="btn success" id="renameSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+<!-- Modal Déplacer -->
+<div class="modal-back" id="moveBack" style="display:none;z-index:200;">
+  <div class="modal" style="max-width:420px;">
+    <h3>Déplacer le cours</h3>
+    <div style="margin:16px 0;">
+      <input type="date" id="moveInput" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text);text-align:center;font-size:16px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="moveCancel">Annuler</button>
+      <button class="btn success" id="moveSave">Déplacer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mini-console flottante pour logs JS -->
+<div class="modal-back" id="dangerBack" style="display:none">
+  <div class="modal" style="max-width:560px">
+    <h3 style="color:#fca5a5">Alerte : réduction anormale des données</h3>
+    <p class="hint">La taille des données à enregistrer a diminué de plus de 40%. Voulez-vous vraiment écraser le fichier ?</p>
+    <div class="modal-actions">
+      <button class="btn" id="dangerAbort">Abandonner</button>
+      <button class="btn warning" id="dangerConfirm">Enregistrer quand même</button>
+    </div>
+  </div>
+</div>
+
+<!-- TIMER / CHRONO (centered modal) -->
+<div class="modal-back" id="timerBack" style="display:none">
+  <div id="timer" class="modal">
+  <div class="timer-header">
+    <div class="dot-sm" id="timerDot" style="background:#22c55e"></div>
+    <div class="timer-title" id="timerTitle">Timer libre</div>
+    <div class="mode-selector">
+      <button class="btn mode-btn active" id="modeTimer">Minuteur</button>
+      <button class="btn mode-btn" id="modeChrono">Chrono</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="timerMin" title="Réduire">−</button>
+    <button class="btn" id="timerClose" title="Fermer">✕</button>
+  </div>
+  <div class="timer-body">
+    <!-- Affichage principal -->
+    <div class="digits" id="timerDigits">00:00:00</div>
+    <div class="hint" id="timerMeta" style="text-align:center;margin:8px 0;">Choisissez un mode et configurez le minuteur</div>
+    
+    <!-- Barre de progression -->
+    <div id="timer-progress" style="margin:16px 0;height:8px;background:#0e1527;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div id="timer-progress-fill" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%;transition:width 0.3s ease;"></div>
+    </div>
+    
+    <!-- Mode Minuteur (compte à rebours) -->
+    <div class="timer-mode" id="timer-mode-timer">
+      <div class="time-setter">
+        <input type="number" id="timer-hours" min="0" max="23" value="0" placeholder="H">
+        <span style="color:var(--text-dim);">:</span>
+        <input type="number" id="timer-minutes" min="0" max="59" value="0" placeholder="M">
+        <span style="color:var(--text-dim);">:</span>
+        <input type="number" id="timer-seconds" min="0" max="59" value="0" placeholder="S">
+      </div>
+      <div class="timer-presets" style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;justify-content:center;">
+        <button class="btn preset-btn" data-duration="300">5min</button>
+        <button class="btn preset-btn" data-duration="600">10min</button>
+        <button class="btn preset-btn" data-duration="900">15min</button>
+        <button class="btn preset-btn" data-duration="1500">25min</button>
+        <button class="btn preset-btn" data-duration="1800">30min</button>
+        <button class="btn preset-btn" data-duration="2700">45min</button>
+        <button class="btn preset-btn" data-duration="3600">1h</button>
+        <button class="btn preset-btn" data-duration="7200">2h</button>
+      </div>
+    </div>
+    
+    <!-- Mode Chronomètre (compte à la hausse) -->
+    <div class="timer-mode chrono" id="timer-mode-chrono" style="display:none;">
+      <div style="text-align:center;margin:16px 0;">
+        <div id="chrono-current-config" style="margin:12px 0;padding:12px;background:#0e1424;border:1px solid var(--border);border-radius:12px;">
+          <div style="font-family:ui-monospace,monospace;font-size:24px;font-weight:700;color:var(--accent);" id="chrono-display">00:00:00</div>
+          <div style="color:var(--text-dim);font-size:13px;margin-top:4px;" id="chrono-name">Chronomètre</div>
+        </div>
+        <button class="btn primary" id="chronoSetup" style="padding:10px 16px;">Nommer le chrono</button>
+      </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="timer-actions">
+      <button class="btn success" id="timerStart">Démarrer</button>
+      <button class="btn" id="timerPause" style="display:none">Pause</button>
+      <button class="btn" id="timerResume" style="display:none">Reprendre</button>
+      <button class="btn warning" id="timerStop" style="display:none">Arrêter & enregistrer</button>
+    </div>
+  </div>
+</div>
+</div>
+<div id="timerDock" class="pill-mini"><button class="btn" id="timerDockBtn">00:00:00</button></div>
+
+<!-- Modal simple pour nommer le chrono -->
+<div class="modal-back" id="chronoSetupModal" style="display:none;z-index:200;">
+  <div class="modal" style="max-width:420px;">
+    <h3>Nom du chronomètre</h3>
+    <div style="margin:16px 0;">
+      <input type="text" id="chronoName" placeholder="Chronomètre" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:#0e1424;color:var(--text);text-align:center;font-size:16px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="chronoCancel">Annuler</button>
+      <button class="btn success" id="chronoSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  try{
+  // DEBUG: Vérifier si l'API Electron est bien exposée
+  console.log('window.electronAPI:', window.electronAPI);
+  function $(s){return document.querySelector(s)}
+  function $$(s){return Array.from(document.querySelectorAll(s))}
+  function ready(f){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',f,{once:true});else f()}
+  function fmtDate(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+  function toKey(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+  function fromKey(s){var a=s.split('-').map(Number);return new Date(a[0],a[1]-1,a[2])}
+  function addDays(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+  function uid(){return Math.random().toString(36).slice(2,9)}
+  function showErr(m){var b=$('#err');if(!b)return;b.className='err';b.textContent=m}
+  function fmtHMS(s){s=Math.max(0|s,0);var h=String(Math.floor(s/3600)).padStart(2,'0');var m=String(Math.floor((s%3600)/60)).padStart(2,'0');var sc=String(s%60).padStart(2,'0');return h+':'+m+':'+sc}
+  function fmtFR(key){try{var d=fromKey(key);return d.toLocaleDateString('fr-FR')}catch(e){return key}}
+  function safeColor(c){c=String(c||'').trim();if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c))return c.toLowerCase();return '#394060'}
+
+  var lastGoodSize = 0;
+      // Track the active file name in localStorage
+      function getActiveFileName() {
+        return localStorage.getItem('activeFileName') || 'pass_j_data.json';
+      }
+  // ...existing code...
+
+      var Store={
+        data:{subjects:[],presets:[],courses:[],events:[],sessions:[],timer:null,ui:{timerWin:null,pill:{side:'right',offset:22}},version:1,backup:{enabled:false,everyMin:60,nextIndex:1,lastAt:0},lastSave:0},lastGood:null,lastSize:0,dirHandle:null,secDirHandle:null,allowEmpty:false,
+    init:async function(){
+        try{
+        // First try to load from localStorage (browser fallback)
+        var raw=localStorage.getItem('pass_j_data');
+        if(raw) this.data=JSON.parse(raw);
+      }catch(e){}
+      // If running inside Electron, prefer the on-disk file (main process)
+      // NOTE: automatic import at startup is disabled intentionally to avoid
+      // showing file-picker dialogs without explicit user action.
+      // Import must be triggered by the user via the "Importer…" button.
+      try{
+        // startup import disabled
+      }catch(e){}
+      if(!this.data.timer)this.data.timer={active:false,evId:null,courseId:null,subjectId:null,start:0,elapsed:0,running:false,minimized:false,title:'',color:'#22c55e'};
+      if(!this.data.ui)this.data.ui={timerWin:null,pill:{side:'right',offset:22}};
+      if(!this.data.backup)this.data.backup={enabled:false,everyMin:60,nextIndex:1,lastAt:0};
+      if(!this.data.lastSave)this.data.lastSave=0;
+      // Récupération des handles de dossier si possible
+      if(window.showDirectoryPicker){
+        try{
+          let id=localStorage.getItem('pass_j_dir');
+          if(id){
+            this.dirHandle=await window.showDirectoryPicker({id:'pass_j_dir',mode:'readwrite'});
+          }
+        }catch(e){this.dirHandle=null;}
+        try{
+          let sid=localStorage.getItem('pass_j_sec_dir');
+          if(sid){
+            this.secDirHandle=await window.showDirectoryPicker({id:'pass_j_sec_dir',mode:'readwrite'});
+          }
+        }catch(e){this.secDirHandle=null;}
+      }
+      this.snapshot();
+    },
+    snapshot:function(){
+      this.lastGood=JSON.parse(JSON.stringify(this.data));
+      try{
+        this.lastSize=JSON.stringify(this.lastGood).length;
+        lastGoodSize = this.lastSize;
+      }catch(e){
+        this.lastSize=0;
+        lastGoodSize = 0;
+      }
+    },
+    touch:function(){
+      localStorage.setItem('pass_j_data',JSON.stringify(this.data));
+      debounceSave();
+    },
+    // Sauvegarde automatique AVEC sécurité
+    exportAuto:async function(){
+      var payload = JSON.stringify(this.data,null,2);
+      var fileName = getActiveFileName();
+      // Vérification perte de données (>40%) sur le fichier actif uniquement
+      var prevSize = typeof lastGoodSize === 'number' && lastGoodSize > 0 ? lastGoodSize : JSON.stringify(this.lastGood || {}).length;
+      var newSize = payload.length;
+      if(prevSize > 50 && newSize < prevSize * 0.6){
+        Danger.ask(async (action) => {
+          if(action === 'continue'){
+            // Continuer la sauvegarde normale
+            if(window.electronAPI){
+              try{
+                const res = await window.electronAPI.exportNow(payload, fileName);
+                if(res && res.ok){
+                  this.snapshot();
+                  lastGoodSize = payload.length;
+                  this.data.lastSave=Date.now();
+                  localStorage.setItem('pass_j_data',JSON.stringify(this.data));
+                  updateAutoLast();
+                  setStatus('Sauvegarde automatique effectuée.');
+                } else {
+                  setStatus('Erreur écriture: '+(res && res.error?res.error:'Erreur inconnue'));
+                }
+              }catch(e){ setStatus('Erreur écriture: '+(e&&e.message?e.message:String(e))); }
+              return;
+            }
+          } else if(action === 'newfile'){
+            // Créer un nouveau fichier vide, le rendre actif
+            // ...existing code...
+          }
+        }, prevSize, newSize);
+        return;
+      }
+      // Sauvegarde normale si pas de perte
+      try{
+        if(window.electronAPI){
+          try{
+            const res = await window.electronAPI.exportNow(payload, fileName);
+            if(res && res.ok){
+              this.snapshot();
+              lastGoodSize = payload.length;
+              this.data.lastSave=Date.now();
+              localStorage.setItem('pass_j_data',JSON.stringify(this.data));
+              updateAutoLast();
+              setStatus('Sauvegarde automatique effectuée.');
+            } else {
+              setStatus('Erreur écriture: '+(res && res.error?res.error:'Erreur inconnue'));
+            }
+          }catch(e){ setStatus('Erreur écriture: '+(e&&e.message?e.message:String(e))); }
+          return;
+        }
+      }catch(e){ /* ignore window.electronAPI access errors and fallback to browser logic */ }
+
+      // Browser fallback (File System Access API)
+      if(!this.dirHandle) return;
+      try{
+        await this._writeMain(payload);
+        this.snapshot();
+        lastGoodSize = payload.length;
+        this.data.lastSave=Date.now();
+        localStorage.setItem('pass_j_data',JSON.stringify(this.data));
+        updateAutoLast();
+        setStatus('Sauvegarde automatique effectuée.');
+      }catch(e){
+        setStatus('Erreur écriture: '+e.message);
+      }
+  },
+    // Écriture du fichier principal
+    _writeMain: async function(payload){
+      if(!this.dirHandle) throw new Error('Aucun dossier sélectionné');
+      try{
+        let fileHandle = await this.dirHandle.getFileHandle('pass_j_data.json', {create:true});
+        let writable = await fileHandle.createWritable();
+        await writable.write(payload);
+        await writable.close();
+      }catch(e){throw e;}
+    },
+  // (copie immuable system removed)
+  // ...existing code...
+  };
+  // Debounce pour éviter trop de sauvegardes simultanées
+  let saveTimeout=null;
+  function debounceSave(){
+    if(saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(()=>{Store.exportAuto();}, 1000);
+  }
+
+
+  // Système Danger et modale supprimés : aucune popup ni détection de perte de données
+
+  // Mise à jour des statuts
+  function updateAutoLast(){
+    var el=document.getElementById('autoLast');
+    if(el) el.textContent=new Date().toLocaleString('fr-FR');
+  }
+
+  // --- Electron-specific logic ---
+  // This code runs only in Electron and uses the 'electronAPI' exposed by preload.js
+  if (typeof window.electronAPI !== 'undefined') {
+    function isoToHuman(iso){
+      if(!iso) return 'Jamais';
+      try{ return new Date(iso).toLocaleString('fr-FR'); } catch { return '—'; }
+    }
+
+    // Function to update the UI with the current status from main process
+    function reflectStatusInUI(status) {
+      const dirNameEl = document.getElementById('dirName');
+      const autoLastEl = document.getElementById('autoLast');
+      const saveStatusEl = document.getElementById('saveStatus');
+      const activeFileEl = document.getElementById('activeFile');
+
+      if (dirNameEl) dirNameEl.textContent = status.saveDir || 'Aucun';
+      if (autoLastEl) autoLastEl.textContent = isoToHuman(status.lastSaveISO);
+      if (saveStatusEl) {
+        saveStatusEl.textContent = status.saveDir 
+          ? `Sauvegarde automatique active dans le dossier choisi.`
+          : `Aucun dossier choisi. Sauvegarde sur le navigateur (localStorage) uniquement.`;
+      }
+      // Affiche le nom du fichier actif (préférer la valeur transmise par le main process)
+      if (activeFileEl) {
+        let fileName = status.activeFile || '—';
+        if ((!fileName || fileName === '—') && status.saveDir) {
+          // Ancienne logique : si le main n'envoie pas le nom, on cherche dans le dossier
+          try {
+            const fs = window.require ? window.require('fs') : null;
+            if (fs) {
+              const files = fs.readdirSync(status.saveDir).filter(f => f.startsWith('pass_j_data') && f.endsWith('.json'));
+              if (files.length) {
+                let latest = files[0];
+                let latestMtime = 0;
+                files.forEach(f => {
+                  const stat = fs.statSync(status.saveDir + '/' + f);
+                  if (stat.mtimeMs > latestMtime) { latestMtime = stat.mtimeMs; latest = f; }
+                });
+                fileName = latest;
+              } else {
+                fileName = 'pass_j_data.json';
+              }
+            } else {
+              fileName = 'pass_j_data.json';
+            }
+          } catch (e) { fileName = 'pass_j_data.json'; }
+        }
+        activeFileEl.textContent = fileName;
+      }
+    }
+
+    // Listen for status updates pushed from the main process
+    window.electronAPI.onStatusUpdate(reflectStatusInUI);
+
+    // Initial status fetch
+    window.electronAPI.getStatus().then(reflectStatusInUI);
+
+    // Wire up buttons to the Electron API
+    on('#pickDir', 'click', async () => {
+      await window.electronAPI.pickDir();
+      // Status is updated via onStatusUpdate
+    });
+
+    on('#exportBtn','click',async function(){
+      try{
+        const rawData = localStorage.getItem('pass_j_data') || '{}';
+        const fileName = getActiveFileName();
+        setStatus('Export en cours...');
+        const result = await window.electronAPI.exportNow(rawData, fileName);
+          if (result && result.ok) {
+            // Charger les données importées dans l'app
+            const raw = (result.data === undefined || result.data === null) ? '{}' : result.data;
+            let imported;
+            // Étape 1 : parsing JSON (erreur claire si invalide)
+            try {
+              imported = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            } catch (parseErr) {
+              console.error('Import parse error:', parseErr, 'raw=', raw);
+              setStatus('Erreur import (JSON invalide) : ' + (parseErr && parseErr.message ? parseErr.message : 'Format incorrect'));
+              return;
+            }
+            // Étape 2 : appliquer les données à l'app (erreur distincte si ça casse)
+            try {
+              Store.data = imported;
+              Store.snapshot && Store.snapshot();
+              renderSubjects();
+              renderPresets();
+              refreshAll();
+              setStatus('Import terminé. (Nouveau fichier de sauvegarde actif)');
+              try{ localStorage.setItem('pass_j_data', JSON.stringify(Store.data)); }catch(e){}
+              if(result.file) { let fileName = result.file.split(/\\|\//).pop(); setActiveFileName(fileName); }
+            } catch (appErr) {
+              console.error('Import apply error:', appErr);
+              setStatus('Erreur application import: ' + (appErr && appErr.message ? appErr.message : String(appErr)));
+            }
+    const listEl = document.getElementById('backupsList');
+    if(!listEl) return;
+    listEl.innerHTML = 'Chargement…';
+    try{
+      const res = await window.electronAPI.listBackups();
+      if(res && res.ok){
+        if(!res.files || !res.files.length){ listEl.innerHTML = '<div class="hint">Aucun backup trouvé.</div>'; return }
+        listEl.innerHTML = '';
+        res.files.forEach(function(f){
+          const row = document.createElement('div');
+          row.className = 'item';
+          row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems='center'; row.style.gap='8px'; row.style.padding='6px';
+          const lbl = document.createElement('div'); lbl.textContent = f; lbl.style.flex='1'; lbl.style.overflow='hidden'; lbl.style.textOverflow='ellipsis';
+          const chk = document.createElement('input'); chk.type='radio'; chk.name='backup-select'; chk.value=f;
+          row.appendChild(lbl); row.appendChild(chk);
+          listEl.appendChild(row);
+        });
+      } else {
+        listEl.innerHTML = '<div class="hint">Erreur: '+(res && res.error?res.error:'Erreur')+'</div>';
+      }
+    }catch(e){ listEl.innerHTML = '<div class="hint">Erreur: '+String(e)+'</div>' }
+  }
+
+  ready(function(){
+    // Correction : forcer la fermeture de tous les overlays/modals au démarrage
+    setTimeout(function() {
+      document.querySelectorAll('.modal-back, .ctx, #dangerBack, #filtersBack, #modalBack, #chronoSetupModal').forEach(function(el) {
+        el.style.display = 'none';
+        el.classList.remove('show');
+      });
+    }, 100);
+
+    // Correction Electron : forcer le relayout et le focus sur le body à chaque activation de la fenêtre
+    if (typeof window.electronAPI !== 'undefined' && window.require) {
+      try {
+        const { ipcRenderer, remote } = window.require('electron');
+        // Pour Electron >= 14, remote peut ne pas être dispo, on utilise ipcRenderer
+        ipcRenderer.on('window-focus', function() {
+          // Forcer un relayout et un focus sur le body
+          document.body.focus();
+          setTimeout(function(){
+            // Déclenche un relayout
+            document.body.style.outline = '1px solid transparent';
+            setTimeout(function(){document.body.style.outline = '';}, 100);
+          }, 10);
+        });
+      } catch(e) { /* ignore */ }
+    }
+
+    // Only wire these in Electron
+    if(typeof window.electronAPI==='undefined') return;
+    // Status update reflect is already registered above
+    on('#backupNow','click',async function(){ setStatus('Création du backup...'); const r=await window.electronAPI.backupNow(); if(r && r.ok) { setStatus('Backup créé: '+r.file); refreshBackupsList(); } else setStatus('Erreur backup: '+(r&&r.error?r.error:'err')) });
+    on('#refreshBackups','click', async function(){ await refreshBackupsList(); setStatus('Liste backups actualisée.'); });
+  on('#restoreSelected','click', async function(){ var sel=document.querySelector('input[name=backup-select]:checked'); if(!sel){ setStatus('Sélectionnez un backup avant de restaurer.'); return } if(!confirm('Restaurer '+sel.value+' ? Cela écrasera la sauvegarde actuelle.')) return; setStatus('Restauration en cours...'); const r=await window.electronAPI.restoreBackup(sel.value); if(r&&r.ok){ try{ Store.data = r.data && typeof r.data==='string'?JSON.parse(r.data):r.data; Store.snapshot(); renderSubjects(); renderPresets(); refreshAll(); setStatus('Restauration terminée.'); }catch(e){ setStatus('Erreur application backup: '+e.message); } } else setStatus('Erreur restauration: '+(r&&r.error?r.error:'err')) });
+    on('#openBackupFolder', async function(){ await window.electronAPI.openBackupFolder(); });
+    on('#openSaveFolder', async function(){ await window.electronAPI.openSaveFolder(); });
+    // Initialize list and status
+    window.electronAPI.getStatus().then(s=>{ if(s){ if(document.getElementById('dirName')) document.getElementById('dirName').textContent = s.saveDir || 'Aucun'; if(document.getElementById('autoLast')) document.getElementById('autoLast').textContent = s.lastSaveISO?new Date(s.lastSaveISO).toLocaleString('fr-FR'):'Jamais'; if(document.getElementById('saveStatus')) document.getElementById('saveStatus').textContent = s.saveDir? 'Sauvegarde active':'Aucun dossier choisi'; } });
+    refreshBackupsList();
+  });
+
+  // Gestion des boutons de sauvegarde et dossiers
+  ready(function(){
+    // This handler is now generic. In Electron, it uses the API. In browser, it does nothing.
+    on('#pickDir','click',async function(){
+      if (window.electronAPI) {
+        await window.electronAPI.pickDir();
+      } else {
+        setStatus('Fonctionnalité disponible uniquement dans l\'application de bureau.');
+      }
+    });
+    
+    // Export manuel -> use main process writer if available
+    on('#exportBtn','click',async function(){
+      if (window.electronAPI) {
+        try{
+          const rawData = localStorage.getItem('pass_j_data') || '{}';
+          const fileName = getActiveFileName();
+          setStatus('Export en cours...');
+          const result = await window.electronAPI.exportNow(rawData, fileName);
+          if (result.ok) setStatus('Export terminé.');
+          else setStatus(`Erreur export : ${result.error}`);
+        }catch(e){ setStatus('Erreur export : '+(e&&e.message?e.message:String(e))); }
+      } else {
+        // Fallback for browser: simple download
+        try {
+          const rawData = localStorage.getItem('pass_j_data') || '{}';
+          const fileName = getActiveFileName();
+          const blob = new Blob([rawData], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch(e) { setStatus('Erreur export : '+(e&&e.message?e.message:String(e))); }
+      }
+    });
+
+    // Import manuel -> use main process loader if available
+    on('#importBtn','click',async function(){
+      if(window.electronAPI){
+        setStatus('Import en cours...');
+        try{
+          const result = await window.electronAPI.importAndSetCurrent();
+          console.log('importAndSetCurrent ->', result);
+          if (result && result.ok) {
+            // Charger les données importées dans l'app
+            try {
+              let imported;
+              if (typeof result.data === 'string') {
+                imported = JSON.parse(result.data);
+              } else {
+                // already an object
+                imported = result.data;
+              }
+              Store.data = imported;
+              Store.snapshot && Store.snapshot();
+              renderSubjects();
+              renderPresets();
+              refreshAll();
+              setStatus('Import terminé. (Nouveau fichier de sauvegarde actif)');
+              // Persister dans localStorage aussi
+              try{ localStorage.setItem('pass_j_data', JSON.stringify(Store.data)); }catch(e){}
+              // Set the imported file as active
+              if(result.file) {
+                let fileName = result.file.split(/\\|\//).pop();
+                setActiveFileName(fileName);
+              }
+            } catch(e) {
+              console.error('Import parse/apply error:', e);
+              setStatus('Erreur import : Données JSON invalides.');
+            }
+          } else {
+            // If user canceled file selection the main returns ok:false; avoid showing a confusing generic error
+            const errMsg = (result && result.error) ? result.error : 'Sélection annulée ou import interrompu.';
+            console.warn('import cancelled or failed:', errMsg);
+            setStatus('Import annulé ou erreur : ' + errMsg);
+          }
+        }catch(e){
+          setStatus('Erreur import : '+(e&&e.message?e.message:String(e)));
+        }
+      } else {
+        setStatus('Fonctionnalité disponible uniquement dans l\'application de bureau.');
+      }
+    });
+  
+    // Reset (full wipe) -- show in-app confirmation modal
+    on('#resetAll','click',async function(){
+      // Affiche une modale centrée avec un beau compte à rebours 10s
+      var overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100vw';
+      overlay.style.height = '100vh';
+      overlay.style.background = 'rgba(15,17,21,0.45)';
+      overlay.style.zIndex = '9999';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.pointerEvents = 'auto';
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.maxWidth = '420px';
+      modal.style.margin = 'auto';
+      modal.style.pointerEvents = 'auto';
+      modal.innerHTML = `
+        <h3 style='color:#e74c3c;text-align:center;margin-bottom:12px;'>⚠️ Confirmation de la réinitialisation</h3>
+        <p style='text-align:center;font-size:1.08em;'>Cette action supprimera <b>toutes les données locales et les backups</b>.<br>Voulez-vous vraiment continuer ?</p>
+        <div id='resetCountdown' style='font-size:2.5em;color:#e74c3c;margin:24px 0;text-align:center;font-weight:700;background:#1b2030;border-radius:12px;padding:12px 0;box-shadow:0 2px 8px #0002;'>10</div>
+        <div class='modal-actions' style='display:flex;justify-content:center;gap:18px;margin-top:18px;'>
+          <button class='btn' id='cancelReset' style='min-width:120px;'>Annuler</button>
+          <button class='btn warning' id='confirmReset' style='min-width:120px;' disabled>Rénitialiser</button>
+        </div>
+      `;
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      var countdown = 10;
+      var interval = setInterval(function(){
+        if(countdown > 0){
+          modal.querySelector('#resetCountdown').textContent = countdown;
+          countdown--;
+        } else {
+          clearInterval(interval);
+          modal.querySelector('#confirmReset').disabled = false;
+          modal.querySelector('#resetCountdown').textContent = '0';
+        }
+      },1000);
+      modal.querySelector('#cancelReset').onclick = function(){
+        clearInterval(interval);
+        document.body.removeChild(overlay);
+      };
+      modal.querySelector('#confirmReset').onclick = async function(){
+        clearInterval(interval);
+        document.body.removeChild(overlay);
+        try{
+          setStatus('Réinitialisation en cours...');
+          const newData = {
+            subjects: [ { id: uid(), name: 'Maths', color: '#22d3ee' }, { id: uid(), name: 'Physique', color: '#a78bfa' } ],
+            presets: [ { id: uid(), name: 'Classique 1-2-5-7-30-40', days: [1,2,5,7,30,40] }, { id: uid(), name: 'Light 1-3-7-14', days: [1,3,7,14] } ],
+            courses: [],
+            events: [],
+            sessions: [],
+            timer: { active:false, evId:null, courseId:null, subjectId:null, start:0, elapsed:0, running:false, minimized:false, title:'', color:'#22c55e' },
+            ui: { timerWin:null, pill:{ side:'right', offset:22 } },
+            version: 1,
+            backup: { enabled:false, everyMin:60, nextIndex:1, lastAt:0 },
+            lastSave: 0
+          };
+          if(window.electronAPI){ try{ await window.electronAPI.resetAll(); }catch(e){ console.warn('resetAll IPC failed', e); } }
+          Store.data = newData;
+          try{ localStorage.setItem('pass_j_data', JSON.stringify(Store.data)); }catch(e){}
+          Store.snapshot && Store.snapshot();
+          renderSubjects(); renderPresets(); refreshAll();
+          setStatus('Réinitialisation effectuée.');
+        }catch(e){ setStatus('Erreur réinitialisation: '+String(e)); }
+      };
+    });
+  });
+
+  var Model={
+    addSubject:function(o){if(!o||!o.name)return;var id=uid();Store.data.subjects.push({id:id,name:o.name,color:safeColor(o.color)});Store.touch();renderSubjects();refreshFilters()},
+    editSubject:function(id,patch){var s=Store.data.subjects.find(function(x){return x.id===id});if(!s)return;if(patch&&patch.color)patch.color=safeColor(patch.color);Object.assign(s,patch);Store.touch();renderSubjects();refreshAll()},
+    delSubject:function(id){Store.data.subjects=Store.data.subjects.filter(function(x){return x.id!==id});Store.touch();renderSubjects();refreshAll()},
+    addPreset:function(o){if(!o||!o.name||!o.days||!o.days.length)return;var id=uid();Store.data.presets.push({id:id,name:o.name,days:o.days});Store.touch();renderPresets()},
+    editPreset:function(id,patch){var p=Store.data.presets.find(function(x){return x.id===id});if(!p)return;Object.assign(p,patch);Store.touch();renderPresets();refreshAll()},
+    delPreset:function(id){Store.data.presets=Store.data.presets.filter(function(x){return x.id!==id});Store.touch();renderPresets()},
+    addCourse:function(o){
+      if(!o)return;
+      var id=uid();
+      // Ajout de la propriété mastery: 'bad' ("à revoir") par défaut
+      Store.data.courses.push({id:id,name:o.name,startDate:o.startDate,subjectId:o.subjectId,presetId:o.presetId,mastery:'bad'});
+      var preset=Store.data.presets.find(function(p){return p.id===o.presetId});
+      if(!preset)return;
+      var base=fromKey(o.startDate);
+      var days=Array.from(new Set([0].concat(preset.days))).sort(function(a,b){return a-b});
+      for(var i=0;i<days.length;i++){
+        var d=days[i];
+        Store.data.events.push({id:uid(),courseId:id,date:toKey(addDays(base,d)),j:d,done:false,duration:0})
+      }
+      Store.touch();
+      closeModal();
+      refreshAll();
+    },
+    moveEvent:function(evId,newDate){var e=Store.data.events.find(function(x){return x.id===evId});if(!e)return;e.date=toKey(newDate);Store.touch();refreshAll()},
+    toggleDone:function(evId){var e=Store.data.events.find(function(x){return x.id===evId});if(!e)return;e.done=!e.done;Store.touch();refreshAll()},
+    setDuration:function(evId,mins){var e=Store.data.events.find(function(x){return x.id===evId});if(!e)return;e.duration=mins|0;Store.touch()},
+    delEvent:function(evId){Store.data.events=Store.data.events.filter(function(x){return x.id!==evId});Store.touch();refreshAll()},
+    editEvent:function(evId,patch){var e=Store.data.events.find(function(x){return x.id===evId});if(!e)return;Object.assign(e,patch);Store.touch();refreshAll()}
+  };
+
+  var UI={view:'mois',refDate:fmtDate(new Date()),filterSubject:'all',filterJ:'all',fSubs:new Set(),fJ:new Set()};
+
+  function renderAgenda(){var wrap=$('#calendar');var title=$('#rangeTitle');if(!wrap||!title)return;wrap.innerHTML='';if(UI.view==='mois')renderMonth(wrap,title);if(UI.view==='semaine')renderWeek(wrap,title);if(UI.view==='jour')renderDay(wrap,title);if(UI.view==='liste')renderList(wrap,title);}
+  function applyFilters(e){if(UI.fSubs&&UI.fSubs.size){var c=Store.data.courses.find(function(c){return c.id===e.courseId});if(!c||!UI.fSubs.has(c.subjectId))return false}else if(UI.filterSubject!=='all'){var c2=Store.data.courses.find(function(c){return c.id===e.courseId});if(!c2||c2.subjectId!==UI.filterSubject)return false} if(UI.fJ&&UI.fJ.size){if(!UI.fJ.has(e.j))return false}else if(UI.filterJ!=='all'&&String(e.j)!==String(UI.filterJ))return false;return true}
+  function getDayEvents(date){var key=toKey(date);return Store.data.events.filter(function(e){return e.date===key}).filter(applyFilters)}
+  function subjectOf(ev){var c=Store.data.courses.find(function(c){return c.id===ev.courseId});if(!c)return{color:'#394060',name:'(sans)'};var s=Store.data.subjects.find(function(ss){return ss.id===c.subjectId});return s||{color:'#394060',name:'(sans)'}}
+  function courseOf(ev){var c=Store.data.courses.find(function(cc){return cc.id===ev.courseId});return c||{name:'(cours supprimé)'}}
+
+  function renderMonth(wrap,title){var y=UI.refDate.getFullYear(),m=UI.refDate.getMonth();var first=new Date(y,m,1);var start=addDays(first,-((first.getDay()+6)%7));var last=new Date(y,m+1,0);var end=addDays(last,6-((last.getDay()+6)%7));title.textContent=first.toLocaleString('fr-FR',{month:'long',year:'numeric'});var head=document.createElement('div');head.className='month';['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(function(d){var el=document.createElement('div');el.className='dow';el.textContent=d;head.appendChild(el)});wrap.appendChild(head);var counts={},max=1;for(var d=new Date(start);d<=end;d=addDays(d,1)){var k=toKey(d);var c=getDayEvents(d).length;counts[k]=c;if(c>max)max=c}var grid=document.createElement('div');grid.className='month';for(var dd=new Date(start);dd<=end;dd=addDays(dd,1)){var cell=document.createElement('div');cell.className='cell';if(toKey(dd)===toKey(new Date()))cell.classList.add('today');if(dd.getMonth()!==m)cell.style.opacity=.45;var dateEl=document.createElement('div');dateEl.className='date';dateEl.textContent=dd.getDate();cell.appendChild(dateEl);var prog=document.createElement('div');prog.className='progress-mini';var fill=document.createElement('div');var load=max?counts[toKey(dd)]/max:0;fill.style.width=Math.round(load*100)+'%';if(load<=0.25){fill.style.setProperty('--bar-color-start','#22c55e');fill.style.setProperty('--bar-color-end','#22c55e')}else if(load<=0.5){fill.style.setProperty('--bar-color-start','#eab308');fill.style.setProperty('--bar-color-end','#eab308')}else if(load<=0.75){fill.style.setProperty('--bar-color-start','#f97316');fill.style.setProperty('--bar-color-end','#f97316')}else{fill.style.setProperty('--bar-color-start','#ef4444');fill.style.setProperty('--bar-color-end','#ef4444')}prog.appendChild(fill);cell.appendChild(prog);var evWrap=document.createElement('div');evWrap.className='events';getDayEvents(dd).forEach(function(ev){evWrap.appendChild(renderEventChip(ev))});cell.appendChild(evWrap);cell.dataset.date=toKey(dd);addDropHandlers(cell);grid.appendChild(cell)}wrap.appendChild(grid);updateDayLoad()}
+  function renderWeek(wrap,title){var mon=addDays(UI.refDate,-((UI.refDate.getDay()+6)%7));var sun=addDays(mon,6);title.textContent=mon.toLocaleDateString('fr-FR')+' – '+sun.toLocaleDateString('fr-FR');var head=document.createElement('div');head.className='month';['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(function(d,i){var el=document.createElement('div');el.className='dow';el.textContent=d+' '+addDays(mon,i).getDate();head.appendChild(el)});wrap.appendChild(head);var max=1,cts=[];for(var i=0;i<7;i++){var dd=addDays(mon,i);var c=getDayEvents(dd).length;cts.push(c);if(c>max)max=c}var row=document.createElement('div');row.className='month';for(var j=0;j<7;j++){var d2=addDays(mon,j);var cell=document.createElement('div');cell.className='cell';if(toKey(d2)===toKey(new Date()))cell.classList.add('today');var prog=document.createElement('div');prog.className='progress-mini';var fill=document.createElement('div');var load=max?cts[j]/max:0;fill.style.width=Math.round(load*100)+'%';if(load<=0.2){fill.style.setProperty('--bar-color-start','#22c55e');fill.style.setProperty('--bar-color-end','#22c55e')}else if(load<=0.4){fill.style.setProperty('--bar-color-start','#eab308');fill.style.setProperty('--bar-color-end','#eab308')}else if(load<=0.6){fill.style.setProperty('--bar-color-start','#f97316');fill.style.setProperty('--bar-color-end','#f97316')}else if(load<=0.8){fill.style.setProperty('--bar-color-start','#ef4444');fill.style.setProperty('--bar-color-end','#ef4444')}else{fill.style.setProperty('--bar-color-start','#991b1b');fill.style.setProperty('--bar-color-end','#991b1b')}prog.appendChild(fill);cell.appendChild(prog);var evWrap=document.createElement('div');evWrap.className='events';getDayEvents(d2).forEach(function(ev){evWrap.appendChild(renderEventChip(ev))});cell.appendChild(evWrap);cell.dataset.date=toKey(d2);addDropHandlers(cell);row.appendChild(cell)}wrap.appendChild(row);updateDayLoad()}
+  function renderDay(wrap,title){var d=UI.refDate;title.textContent=d.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});var r=document.createElement('div');r.className='month';var cell=document.createElement('div');cell.className='cell today';cell.style.gridColumn='span 7';var prog=document.createElement('div');prog.className='progress-mini';var fill=document.createElement('div');var c=getDayEvents(d).length;var load = c ? 1 : 0;fill.style.width=(load*100)+'%';if(load<=0.2){fill.style.setProperty('--bar-color-start','#22c55e');fill.style.setProperty('--bar-color-end','#22c55e')}else if(load<=0.4){fill.style.setProperty('--bar-color-start','#eab308');fill.style.setProperty('--bar-color-end','#eab308')}else if(load<=0.6){fill.style.setProperty('--bar-color-start','#f97316');fill.style.setProperty('--bar-color-end','#f97316')}else if(load<=0.8){fill.style.setProperty('--bar-color-start','#ef4444');fill.style.setProperty('--bar-color-end','#ef4444')}else{fill.style.setProperty('--bar-color-start','#991b1b');fill.style.setProperty('--bar-color-end','#991b1b')}prog.appendChild(fill);cell.appendChild(prog);var evWrap=document.createElement('div');evWrap.className='events';getDayEvents(d).forEach(function(ev){evWrap.appendChild(renderEventChip(ev))});cell.appendChild(evWrap);cell.dataset.date=toKey(d);addDropHandlers(cell);r.appendChild(cell);wrap.appendChild(r);updateDayLoad()}
+  function renderList(wrap,title){var start=addDays(UI.refDate,-21),end=addDays(UI.refDate,60);title.textContent='Liste · '+start.toLocaleDateString('fr-FR')+' → '+end.toLocaleDateString('fr-FR');var days=[];for(var d=new Date(start);d<=end;d=addDays(d,1))days.push(fmtDate(d));var container=document.createElement('div');days.forEach(function(dd){var evs=getDayEvents(dd);if(!evs.length)return;var card=document.createElement('div');card.className='card';card.style.marginBottom='8px';var h=document.createElement('div');h.className='title';h.textContent=dd.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});card.appendChild(h);var list=document.createElement('div');list.className='events';evs.forEach(function(ev){list.appendChild(renderEventChip(ev))});var prog=document.createElement('div');prog.className='progress-mini';var fill=document.createElement('div');fill.style.width='100%';prog.appendChild(fill);card.appendChild(list);card.appendChild(prog);container.appendChild(card)});wrap.appendChild(container);updateDayLoad()}
+  function renderEventChip(ev){
+    var s=subjectOf(ev);var c=courseOf(ev);
+    var el=document.createElement('div'); el.className='ev'+(ev.done?' done':''); el.draggable=true; el.dataset.id=ev.id;
+    // Ajout du contour néon selon le niveau de maîtrise du cours
+    if(c && c.mastery){
+      // Style néon plus fin, doux, premium
+      let glow, border;
+      if(c.mastery==='ok'){
+        glow = '0 0 6px 0 #22c55e99, 0 0 18px 2px #22c55e33';
+        border = '1px solid #22c55e';
+      } else if(c.mastery==='mid'){
+        glow = '0 0 6px 0 #fbbf2499, 0 0 18px 2px #fbbf2433';
+        border = '1px solid #fbbf24';
+      } else if(c.mastery==='bad'){
+        glow = '0 0 6px 0 #ef444499, 0 0 18px 2px #ef444433';
+        border = '1px solid #ef4444';
+      }
+      el.style.boxShadow = glow;
+      el.style.border = border;
+      el.style.transition = 'box-shadow 0.25s, border 0.25s';
+    }
+    var bar=document.createElement('div'); bar.className='bar'; bar.style.background=safeColor(s.color); el.appendChild(bar);
+    var nameDiv=document.createElement('div'); nameDiv.className='name'; nameDiv.title=c.name||''; var clean=(c.name||'').replace(/[<>]/g,''); nameDiv.textContent=clean; el.appendChild(nameDiv);
+    var meta=document.createElement('div'); meta.className='meta'; meta.textContent='J'+ev.j+' · '+fmtFR(ev.date); el.appendChild(meta);
+    var check=document.createElement('div'); check.className='check'+(ev.done?' active':''); check.setAttribute('aria-label','Marquer comme fait');
+    var svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24');
+    var path=document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('fill','currentColor'); path.setAttribute('d','M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'); svg.appendChild(path); check.appendChild(svg); el.appendChild(check);
+    addEventHandlers(el,ev);
+    return el;
+  }
+  function addEventHandlers(el,ev){
+    el.addEventListener('mouseenter',function(e){showTip(courseOf(ev).name+' — J'+ev.j+' — '+ev.date,e)});
+    el.addEventListener('mouseleave',hideTip);
+    el.addEventListener('dragstart',function(e){e.dataTransfer.setData('text/plain',ev.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.dropEffect='move'});
+    var chk=el.querySelector('.check'); if(chk) chk.addEventListener('click',function(){Model.toggleDone(ev.id)});
+    el.addEventListener('contextmenu',function(e){e.preventDefault();openContextMenu(ev,e.clientX,e.clientY)});
+  }
+  function addDropHandlers(cell){cell.addEventListener('dragenter',function(){cell.classList.add('drag-over')});cell.addEventListener('dragover',function(e){e.preventDefault();cell.classList.add('drag-over')});cell.addEventListener('dragleave',function(){cell.classList.remove('drag-over')});cell.addEventListener('drop',function(e){e.preventDefault();cell.classList.remove('drag-over');var id=e.dataTransfer.getData('text/plain');if(!id)return;if(cell.dataset.date)Model.moveEvent(id,fromKey(cell.dataset.date))})}
+  document.addEventListener('dragover',function(e){e.preventDefault()});
+  document.addEventListener('drop',function(e){var t=e.target; if(!(t&&(t.closest&&t.closest('.calendar'))))e.preventDefault()});
+
+  function updateDayLoad(){var bar=$('#dayLoad');if(!bar)return;var key=toKey(UI.refDate);var evs=Store.data.events.filter(function(e){return e.date===key}).filter(applyFilters);var load=Math.max(0,Math.min(100,evs.length*10));bar.style.width=load+'%'}
+
+  function renderSubjects(){var list=$('#subjList');if(!list)return;list.innerHTML='';Store.data.subjects.forEach(function(s){
+    var tr=document.createElement('tr');
+    var td1=document.createElement('td'); var sp=document.createElement('span'); sp.className='chip'; sp.style.background=safeColor(s.color); td1.appendChild(sp); tr.appendChild(td1);
+    var td2=document.createElement('td'); td2.textContent=s.name; tr.appendChild(td2);
+    var td3=document.createElement('td'); td3.className='actions';
+    var b1=document.createElement('button'); b1.className='btn'; b1.textContent='Éditer'; b1.onclick=function(){var name=prompt('Nom',s.name)||s.name; var color=prompt('Couleur hex',s.color)||s.color; Model.editSubject(s.id,{name:name,color:color})};
+    var b2=document.createElement('button'); b2.className='btn'; b2.textContent='Suppr.'; b2.onclick=function(){if(confirm('Supprimer la matière ?')) Model.delSubject(s.id)};
+    td3.appendChild(b1); td3.appendChild(b2); tr.appendChild(td3);
+    list.appendChild(tr);
+  });
+  var sel=$('#courseSubject'); if(sel){sel.innerHTML=''; Store.data.subjects.forEach(function(s){var o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sel.appendChild(o)})}}
+
+  function renderPresets(){var list=$('#preList');if(!list)return;list.innerHTML='';Store.data.presets.forEach(function(p){
+    var tr=document.createElement('tr');
+    var td1=document.createElement('td'); td1.textContent=p.name; tr.appendChild(td1);
+    var td2=document.createElement('td'); td2.textContent=p.days.join(', '); tr.appendChild(td2);
+    var td3=document.createElement('td'); td3.className='actions';
+    var b1=document.createElement('button'); b1.className='btn'; b1.textContent='Éditer'; b1.onclick=function(){var name=prompt('Nom',p.name)||p.name; var days=prompt('J (ex: 1,2,5,7,30,40)',p.days.join(','))||p.days.join(','); var arr=days.split(',').map(function(x){return parseInt(x.trim(),10)}).filter(function(x){return !isNaN(x)&&x>=0}); Model.editPreset(p.id,{name:name,days:arr})};
+    var b2=document.createElement('button'); b2.className='btn'; b2.textContent='Suppr.'; b2.onclick=function(){if(confirm('Supprimer le preset ?')) Model.delPreset(p.id)};
+    td3.appendChild(b1); td3.appendChild(b2); tr.appendChild(td3);
+    list.appendChild(tr);
+  });
+  var sel=$('#coursePreset'); if(sel){sel.innerHTML=''; Store.data.presets.forEach(function(p){var o=document.createElement('option'); o.value=p.id; o.textContent=p.name; sel.appendChild(o)})}}
+
+  function collectSessions(){return (Store.data.sessions||[]).slice()}
+  function secOf(s){return s.seconds?Math.max(0,s.seconds|0):((s.duration||0)*60)|0}
+  function sumSec(arr){return arr.reduce(function(a,b){return a+secOf(b)},0)}
+  function subjectIdOfSession(s){if(s.subjectId)return s.subjectId;var c=Store.data.courses.find(function(x){return x.id===s.courseId});if(c&&c.subjectId)return c.subjectId;var ev=Store.data.events.find(function(x){return x.id===s.evId});if(ev){var cc=Store.data.courses.find(function(x){return x.id===ev.courseId});if(cc&&cc.subjectId)return cc.subjectId}return '(inconnu)'}
+
+  function renderStats(){
+    var sessions=collectSessions();
+    var sStart=$('#statStart'); var sEnd=$('#statEnd');
+    var start=sStart&&sStart.value?fromKey(sStart.value):new Date(0);
+    var end=sEnd&&sEnd.value?fromKey(sEnd.value):new Date(8640000000000000);
+    var inRange=sessions.filter(function(s){var d=fromKey(s.date);return d>=start&&d<=end});
+    var total=sumSec(inRange); var kpi=$('#kpiTotal'); if(kpi) kpi.textContent='Total: '+fmtHMS(total);
+    var grpSel=$('#statGroup'); var group=(grpSel&&grpSel.value)||'subject';
+    var groups={subject:function(s){return subjectIdOfSession(s)},course:function(s){return s.courseId||'(inconnu)'},day:function(s){return s.date}};
+    var labellers={subject:function(id){var s=Store.data.subjects.find(function(x){return x.id===id})||{name:'(inconnu)'};return s.name},course:function(id){var c=Store.data.courses.find(function(x){return x.id===id})||{name:'(supprimé)'};return c.name},day:function(id){return id}};
+    var map={}; inRange.forEach(function(s){var k=groups[group](s); map[k]=(map[k]||0)+secOf(s)});
+    var rows=Object.entries(map).sort(function(a,b){return b[1]-a[1]});
+    var tb=$('#statsTable'); if(tb){tb.innerHTML=''; rows.forEach(function(r){
+      var k=r[0],secs=r[1];
+      var tr=document.createElement('tr');
+      var tdLabel=document.createElement('td'); tdLabel.textContent=labellers[group](k); tr.appendChild(tdLabel);
+      var tdTime=document.createElement('td'); tdTime.textContent=fmtHMS(secs); tr.appendChild(tdTime);
+      var tdPct=document.createElement('td');
+      var pr=document.createElement('div'); pr.className='progress';
+      var fill=document.createElement('div'); fill.style.width=(total?Math.round(secs/total*100):0)+'%'; pr.appendChild(fill);
+      tdPct.appendChild(pr); tr.appendChild(tdPct);
+      tb.appendChild(tr);
+    })}
+    var th=$('#thLabel'); if(th) th.textContent=group==='day'?'Date':(group==='course'?'Cours':'Matière');
+    drawChart(rows.slice().reverse(),group,total);
+    renderSessionHistory();
+  }
+
+  function drawChart(rows,group,total){var canvas=$('#statsChart'); if(!canvas)return; var cssW=canvas.clientWidth||((canvas.parentElement&&canvas.parentElement.clientWidth)||600); canvas.style.width=cssW+'px'; var ctx=canvas.getContext('2d'); var dpr=window.devicePixelRatio||1; var W=canvas.width=Math.max(1,Math.floor(cssW*dpr)); var H=canvas.height=240*dpr; ctx.clearRect(0,0,W,H); var n=rows.length||1; var vals=rows.map(function(r){return r[1]}); var max=Math.max(1,Math.max.apply(null,[0].concat(vals))); var chartSel=$('#statChart'); var chartType=(chartSel&&chartSel.value)||'bar'; var labelFn=function(id){if(group==='day')return id.slice(5); if(group==='subject'){var s=Store.data.subjects.find(function(x){return x.id===id});return s?s.name:'.';} if(group==='course'){var c=Store.data.courses.find(function(x){return x.id===id});return c?c.name:'.';} return id};
+    // Improve layout: dynamic bottom padding for labels
+    ctx.font=12*dpr+'px Inter, system-ui, sans-serif';
+    var labels=rows.map(function(r){return labelFn(r[0])});
+    var maxLabelW=0; labels.forEach(function(t){ maxLabelW=Math.max(maxLabelW, ctx.measureText(String(t||'')).width) });
+    var leftPad=30*dpr, rightPad=20*dpr, topPad=20*dpr, bottomPad=Math.min(140*dpr, Math.max(40*dpr, 16*dpr + maxLabelW*0.65));
+    var innerW=W-leftPad-rightPad, innerH=H-topPad-bottomPad;
+    ctx.clearRect(0,0,W,H);
+    // Axis line
+    ctx.strokeStyle='#2a3147'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(leftPad, H-bottomPad+.5); ctx.lineTo(W-rightPad, H-bottomPad+.5); ctx.stroke();
+    // Build hits for tooltip
+    var hits=[];
+    var showCount=Math.max(1, Math.floor(innerW/(50*dpr))); var step=Math.max(1, Math.ceil((rows.length||1)/showCount));
+    if(chartType==='bar'){
+      var bw=Math.max(2,innerW/n*0.7);
+      rows.forEach(function(rv,i){
+        var v=rv[1]; var x=leftPad+innerW*(i+.15)/n; var h=innerH*(v/max); var y=H-bottomPad-h; var grad=ctx.createLinearGradient(0,y,0,H-bottomPad); grad.addColorStop(0,'#67e8f9'); grad.addColorStop(1,'#a78bfa'); ctx.fillStyle=grad; ctx.fillRect(x, y, bw, h);
+        hits.push({type:'bar',x:x,y:y,w:bw,h:h,label:labels[i],val:v});
+      });
+    } else {
+      ctx.beginPath();
+      rows.forEach(function(rv,i){var v=rv[1]; var x=leftPad+innerW*(i+0.5)/n; var y=H-bottomPad-innerH*(v/max); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y)});
+      ctx.strokeStyle='#67e8f9'; ctx.lineWidth=2; ctx.stroke();
+      rows.forEach(function(rv,i){var v=rv[1]; var x=leftPad+innerW*(i+0.5)/n; var y=H-bottomPad-innerH*(v/max); ctx.fillStyle='#67e8f9'; ctx.beginPath(); ctx.arc(x,y,3*dpr,0,Math.PI*2); ctx.fill(); hits.push({type:'pt',x:x-5*dpr,y:y-5*dpr,w:10*dpr,h:10*dpr,label:labels[i],val:v});});
+    }
+    // Labels (subsample to avoid overlap) with background pill for contrast
+    rows.forEach(function(rv,i){ if(i%step!==0) return; var x=leftPad+innerW*(i+0.5)/n; var txt=String(labels[i]||'');
+      var maxChars=Math.max(4, Math.floor((innerW/n)/(7*dpr))); if(txt.length>maxChars) txt=txt.slice(0,maxChars-1)+'…';
+      var baseY=H-bottomPad+6*dpr; ctx.font=12*dpr+'px Inter, system-ui, sans-serif'; var tw=ctx.measureText(txt).width; var padX=6*dpr, padY=3*dpr; var h=18*dpr; var w=tw+padX*2; var x0=x-w/2, y0=baseY;
+      // rounded rect background
+      ctx.save();
+      ctx.fillStyle='#121826'; ctx.strokeStyle='#2a3147'; ctx.lineWidth=1;
+      var r=6*dpr; ctx.beginPath(); ctx.moveTo(x0+r,y0); ctx.lineTo(x0+w-r,y0); ctx.quadraticCurveTo(x0+w,y0,x0+w,y0+r); ctx.lineTo(x0+w,y0+h-r); ctx.quadraticCurveTo(x0+w,y0+h,x0+w-r,y0+h); ctx.lineTo(x0+r,y0+h); ctx.quadraticCurveTo(x0,y0+h,x0,y0+h-r); ctx.lineTo(x0,y0+r); ctx.quadraticCurveTo(x0,y0,x0+r,y0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // text
+      ctx.fillStyle='#e6e9ef'; ctx.textBaseline='middle'; ctx.textAlign='center'; ctx.fillText(txt, x, y0+h/2);
+      ctx.restore();
+    });
+    // Bind tooltip once
+    if(!canvas._bound){
+      canvas._bound=true;
+      canvas.addEventListener('mousemove', function(e){
+        var rect=canvas.getBoundingClientRect(); var px=(e.clientX-rect.left)*dpr; var py=(e.clientY-rect.top)*dpr;
+        for(var i=0;i<hits.length;i++){ var h=hits[i]; if(px>=h.x && px<=h.x+h.w && py>=h.y && py<=h.y+h.h){ showTip(h.label+' · '+fmtHMS(Math.round((h.val||0))), e); return }}
+        hideTip();
+      });
+      canvas.addEventListener('mouseleave', function(){ hideTip() });
+    }
+    // Store hits for subsequent mousemove (rebuilt each render)
+    canvas._hits=hits;
+  }
+
+  function jOfSession(s){
+    if(s && s.evId){ var ev=Store.data.events.find(function(x){return x.id===s.evId}); if(ev) return ev.j; }
+    return null;
+  }
+  function renderSessionHistory(){
+    var sStart=$('#statStart'); var sEnd=$('#statEnd');
+    var start=sStart&&sStart.value?fromKey(sStart.value):new Date(0);
+    var end=sEnd&&sEnd.value?fromKey(sEnd.value):new Date(8640000000000000);
+    if(!UI.hist) UI.hist={subj:'all',course:'all',j:'all',sort:'date_desc'};
+
+    var subjSel=$('#histSubject'), courseSel=$('#histCourse'), jSel=$('#histJ'), sortSel=$('#histSort');
+    var keepSubj=UI.hist.subj, keepCourse=UI.hist.course, keepJ=UI.hist.j, keepSort=UI.hist.sort;
+    // Rebuild filters each time (preserve selection)
+    if(subjSel){
+      subjSel.innerHTML='';
+      var opt=document.createElement('option'); opt.value='all'; opt.textContent='Toutes matières'; subjSel.appendChild(opt);
+      Store.data.subjects.forEach(function(s){ var o=document.createElement('option'); o.value=s.id; o.textContent=s.name; subjSel.appendChild(o) });
+      subjSel.value=keepSubj||'all';
+    }
+    if(courseSel){
+      courseSel.innerHTML='';
+      var opt2=document.createElement('option'); opt2.value='all'; opt2.textContent='Tous cours'; courseSel.appendChild(opt2);
+      Store.data.courses.forEach(function(c){ var o=document.createElement('option'); o.value=c.id; o.textContent=c.name; courseSel.appendChild(o) });
+      courseSel.value=keepCourse||'all';
+    }
+    if(jSel){
+      jSel.innerHTML='';
+      var opt3=document.createElement('option'); opt3.value='all'; opt3.textContent='Tous J'; jSel.appendChild(opt3);
+      var js=new Set(); (Store.data.sessions||[]).forEach(function(s){ var j=jOfSession(s); if(j!==null && j!==undefined) js.add(j) });
+      Array.from(js).sort(function(a,b){return a-b}).forEach(function(v){ var o=document.createElement('option'); o.value=String(v); o.textContent='J'+v; jSel.appendChild(o) });
+      jSel.value=(keepJ!=null?keepJ:'all');
+    }
+    if(sortSel){ sortSel.value=keepSort||'date_desc'; }
+
+    // Persist on change
+    if(subjSel && !subjSel.dataset.bound){ subjSel.dataset.bound='1'; subjSel.addEventListener('change', function(){ UI.hist.subj=subjSel.value; renderSessionHistory() }) }
+    if(courseSel && !courseSel.dataset.bound){ courseSel.dataset.bound='1'; courseSel.addEventListener('change', function(){ UI.hist.course=courseSel.value; renderSessionHistory() }) }
+    if(jSel && !jSel.dataset.bound){ jSel.dataset.bound='1'; jSel.addEventListener('change', function(){ UI.hist.j=jSel.value; renderSessionHistory() }) }
+    if(sortSel && !sortSel.dataset.bound){ sortSel.dataset.bound='1'; sortSel.addEventListener('change', function(){ UI.hist.sort=sortSel.value; renderSessionHistory() }) }
+
+    // Build filtered list
+    var sessions=collectSessions();
+    var inRange=sessions.filter(function(s){ var d=fromKey(s.date); return d>=start && d<=end });
+    var filtered=inRange.filter(function(s){
+      var subjOk = (UI.hist.subj==='all') || (subjectIdOfSession(s)===UI.hist.subj);
+      var courseOk = (UI.hist.course==='all') || ((s.courseId||'')===UI.hist.course);
+      var jVal=jOfSession(s); var jOk = (UI.hist.j==='all') || (String(jVal)===String(UI.hist.j));
+      return subjOk && courseOk && jOk;
+    });
+
+    // Sorting
+    var sorter=UI.hist.sort||'date_desc';
+    filtered.sort(function(a,b){
+      if(sorter==='date_desc') return fromKey(b.date)-fromKey(a.date);
+      if(sorter==='date_asc') return fromKey(a.date)-fromKey(b.date);
+      var da=secOf(a), db=secOf(b);
+      if(sorter==='dur_desc') return db-da;
+      if(sorter==='dur_asc') return da-db;
+      return 0;
+    });
+
+    // Render table
+    var tb=$('#histTable'); var cnt=$('#histCount');
+    if(cnt){ cnt.textContent=filtered.length+' session'+(filtered.length>1?'s':''); }
+    if(tb){
+      tb.innerHTML='';
+      filtered.forEach(function(s){
+        var tr=document.createElement('tr');
+        var tdDate=document.createElement('td'); tdDate.textContent=fmtFR(s.date); tr.appendChild(tdDate);
+        var tdDur=document.createElement('td'); tdDur.textContent=fmtHMS(secOf(s)); tr.appendChild(tdDur);
+        var c=Store.data.courses.find(function(x){return x.id===(s.courseId||'')});
+        var tdCourse=document.createElement('td'); var cn=document.createElement('span'); cn.className='ellipsis'; cn.textContent=c?c.name:'(libre)'; cn.title=c?c.name:'(libre)'; tdCourse.appendChild(cn); tr.appendChild(tdCourse);
+        var subjId=subjectIdOfSession(s); var subj=Store.data.subjects.find(function(x){return x.id===subjId});
+        var tdSubj=document.createElement('td');
+          var wrap=document.createElement('div'); wrap.style.display='flex'; wrap.style.alignItems='center'; wrap.style.gap='8px'; wrap.title=subj?subj.name:'(inconnu)';
+          var chip=document.createElement('span'); chip.className='chip'; chip.style.background=safeColor(subj&&subj.color); wrap.appendChild(chip);
+          var name=document.createElement('span'); name.className='ellipsis'; name.textContent=subj?subj.name:'(inconnu)'; wrap.appendChild(name);
+          tdSubj.appendChild(wrap);
+        tr.appendChild(tdSubj);
+        var tdJ=document.createElement('td'); var j=jOfSession(s); tdJ.textContent=(j==null||j==undefined)?'—':'J'+j; tr.appendChild(tdJ);
+        tb.appendChild(tr);
+      });
+    }
+  }
+
+  // ---------- TIMER / CHRONO corrigés -----------
+  var Timer={
+    int:null,isFullscreen:false,
+    mode:'timer', // 'timer' ou 'chrono'
+    timerDuration:0,timerRemaining:0,
+    audioContext:null,
+    bind:function(){
+      try{Timer.audioContext=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+      on('#timerStart','click',Timer.start);
+      on('#timerPause','click',Timer.pause);
+      on('#timerResume','click',Timer.resume);
+      on('#timerStop','click',Timer.stop);
+      on('#timerMin','click',function(){Timer.minimize(true)});
+      on('#timerClose','click',Timer.close);
+      on('#timerDockBtn','click',function(){Timer.minimize(false)});
+      on('#modeTimer','click',function(){Timer.setMode('timer')});
+      on('#modeChrono','click',function(){Timer.setMode('chrono')});
+      // Saisie durée minuteur
+      on('#timer-hours','input',Timer.updateTimerDuration);
+      on('#timer-minutes','input',Timer.updateTimerDuration);
+      on('#timer-seconds','input',Timer.updateTimerDuration);
+      // Presets
+      $$('.preset-btn').forEach(function(btn){
+        var d=parseInt(btn.dataset.duration,10); if(!d)return;
+        btn.addEventListener('click',function(){
+          $('#timer-hours').value=Math.floor(d/3600);
+          $('#timer-minutes').value=Math.floor((d%3600)/60);
+          $('#timer-seconds').value=d%60;
+          Timer.updateTimerDuration();
+        })
+      });
+      // Modal nom chrono
+      on('#chronoSetup','click',function(){var m=$('#chronoSetupModal'); if(m){m.style.display='flex'; requestAnimationFrame(function(){m.classList.add('show')})}});
+      on('#chronoCancel','click',function(){var m=$('#chronoSetupModal'); if(m){m.classList.remove('show'); setTimeout(function(){m.style.display='none'},200)}});
+      on('#chronoSave','click',function(){
+        var name=($('#chronoName')&&$('#chronoName').value.trim())||'Chronomètre';
+        var st=Store.data.timer||{}; st.title=name; Store.data.timer=st; Store.touch();
+        var n=$('#chrono-name'); if(n) n.textContent=name;
+        var m=$('#chronoSetupModal'); if(m){m.classList.remove('show'); setTimeout(function(){m.style.display='none'},200)};
+        Timer.updateUI();
+      });
+
+      // Initial state
+      Timer.progressBar = $('#timer-progress-fill'); // utiliser la barre existante
+    },
+    setMode:function(mode){
+      Timer.mode=mode;
+      $('#modeTimer').classList.toggle('active',mode==='timer');
+      $('#modeChrono').classList.toggle('active',mode==='chrono');
+      $('#timer-mode-timer').style.display=mode==='timer'?'block':'none';
+      $('#timer-mode-chrono').style.display=mode==='chrono'?'block':'none';
+      Timer.updateUI();
+    },
+    updateTimerDuration:function(){
+      var h=parseInt($('#timer-hours').value)||0;
+      var m=parseInt($('#timer-minutes').value)||0;
+      var s=parseInt($('#timer-seconds').value)||0;
+      Timer.timerDuration=h*3600+m*60+s;
+      Timer.timerRemaining=Timer.timerDuration;
+      Timer.updateUI();
+    },
+    start:function(){
+      var st=Store.data.timer||{active:false,elapsed:0};
+      st.active=true;
+      if(Timer.mode==='timer'){
+        // s'assurer qu'une durée est définie
+        Timer.updateTimerDuration();
+        if(Timer.timerDuration<=0){
+          alert('Définissez une durée pour démarrer le minuteur.');
+          return;
+        }
+      }
+      st.running=true;
+      st.start=Date.now();
+      Store.data.timer=st; Store.touch();
+      Timer.tickStart();
+      // verrouillage des champs uniquement pour le minuteur
+      var disable=(Timer.mode==='timer');
+      ['#timer-hours','#timer-minutes','#timer-seconds'].forEach(function(sel){var el=$(sel); if(el) el.disabled=disable});
+      $$('.preset-btn').forEach(function(b){b.disabled=disable});
+      Timer.updateUI();
+    },
+    pause:function(){
+      var st=Store.data.timer; if(!st||!st.running) return;
+      st.elapsed += Math.floor((Date.now()-st.start)/1000);
+      st.running=false; Store.touch();
+      Timer.tickStop(); Timer.updateUI();
+    },
+    resume:function(){
+      var st=Store.data.timer; if(!st||st.running||!st.active) return;
+      st.running=true; st.start=Date.now(); Store.touch();
+      Timer.tickStart(); Timer.updateUI();
+    },
+    stop:function(){
+      var st=Store.data.timer; if(!st||!st.active) return;
+      if(st.running){ st.elapsed += Math.floor((Date.now()-st.start)/1000) }
+      var secs=st.elapsed|0; var date=toKey(new Date());
+      if(secs>0){ Store.data.sessions.push({seconds:secs,date:date,courseId:st.courseId,subjectId:st.subjectId,evId:st.evId,startedAt:new Date().toISOString()}) }
+      // reset
+      Store.data.timer={active:false,evId:null,courseId:null,subjectId:null,start:0,elapsed:0,running:false,minimized:false,title:'',color:'#22c55e'};
+      Store.touch(); Timer.tickStop();
+      // déverrouillage
+      ['#timer-hours','#timer-minutes','#timer-seconds'].forEach(function(sel){var el=$(sel); if(el) el.disabled=false});
+      $$('.preset-btn').forEach(function(b){b.disabled=false});
+      if(Timer.progressBar) Timer.progressBar.style.width='0%';
+      var pan=$('#timer'); var dock=$('#timerDock'); if(pan) pan.style.display='none'; if(dock) dock.style.display='none';
+      renderStats();
+    },
+    minimize:function(min){
+      var st=Store.data.timer; if(!st||!st.active) return; st.minimized=!!min; Store.touch();
+      var back=$('#timerBack'); var dock=$('#timerDock');
+      if(back){
+        if(min){ back.classList.remove('show'); setTimeout(function(){ back.style.display='none' },200) }
+        else { back.style.display='flex'; requestAnimationFrame(function(){ back.classList.add('show') }) }
+      }
+      if(dock) dock.style.display=min?'block':'none';
+      Timer.updateUI(); applyPositions()
+    },
+    close:function(){var st=Store.data.timer; if(!st||!st.active) return; Timer.minimize(true)},
+    tickStart:function(){clearInterval(Timer.int); Timer.int=setInterval(Timer.updateUI,1000)},
+    tickStop:function(){clearInterval(Timer.int)},
+    showWindowed:function(){ var back=$('#timerBack'); if(!back)return; back.style.display='flex'; requestAnimationFrame(function(){ back.classList.add('show') }) },
+    updateUI:function(){
+      var st=Store.data.timer||{active:false,elapsed:0,running:false};
+      // Titre / pastille
+      var t1=$('#timerTitle'); if(t1) t1.textContent=st.title||(Timer.mode==='timer'?'Minuteur':'Chronomètre');
+      var td=$('#timerDot'); if(td) td.style.background=st.color||'#22c55e';
+      // Affichage temps
+      var displaySeconds=0;
+      if(Timer.mode==='timer'){
+        // calcule le restant
+        var elapsedRunning = st.running ? Math.floor((Date.now()-st.start)/1000) : 0;
+        var already = st.elapsed|0;
+        var dur = Timer.timerDuration|0;
+        var remaining = Math.max(0, dur - (already + elapsedRunning));
+        Timer.timerRemaining=remaining;
+        displaySeconds=remaining;
+        // son et auto-pause si fini
+        if(st.running && remaining<=0){
+          Timer.playEndSound();
+          Timer.pause();
+          var tm=$('#timerMeta'); if(tm){tm.textContent='⏰ Temps écoulé !'; tm.style.color='var(--red)';}
+        }
+        // Progression
+        if(Timer.progressBar && dur>0){
+          var progress = ((dur-remaining)/dur)*100;
+          Timer.progressBar.style.width = Math.min(100,Math.max(0,progress))+'%';
+        }
+      }else{
+        // CHRONO : compte à la hausse
+        var elapsed = (st.elapsed|0) + (st.running ? Math.floor((Date.now()-st.start)/1000) : 0);
+        displaySeconds=elapsed;
+        // pas de barre de progression pour le chrono
+        if(Timer.progressBar){ Timer.progressBar.style.width='0%'; }
+        var cd=$('#chrono-display'); if(cd) cd.textContent=fmtHMS(elapsed);
+      }
+      var dig=$('#timerDigits'); if(dig) dig.textContent=fmtHMS(displaySeconds);
+      var dock=$('#timerDockBtn'); if(dock) dock.textContent='⏱ '+fmtHMS(displaySeconds)+'  ·  '+(st.title||'');
+
+      // Texte d'état
+      var tm=$('#timerMeta');
+      if(tm){
+        if(Timer.mode==='timer'){
+          if(st.running){ tm.textContent='Minuteur en cours… ('+fmtHMS(Timer.timerRemaining)+' restant)'; tm.style.color='var(--text-dim)'; }
+          else if((Timer.timerDuration|0)>0 && (Timer.timerRemaining|0)>0){ tm.textContent='Prêt à démarrer.'; tm.style.color='var(--text-dim)'; }
+          else { tm.textContent='Définissez la durée et cliquez sur Démarrer'; tm.style.color='var(--text-dim)'; }
+        }else{
+          if(st.running){ tm.textContent='Chronomètre en cours…'; tm.style.color='var(--text-dim)'; }
+          else if((st.elapsed|0)>0){ tm.textContent='Chrono en pause.'; tm.style.color='var(--text-dim)'; }
+          else { tm.textContent='Cliquez sur Démarrer pour lancer le chrono'; tm.style.color='var(--text-dim)'; }
+        }
+      }
+
+      // Boutons visibles selon le mode
+      var s1=$('#timerStart'), s2=$('#timerPause'), s3=$('#timerResume'), s4=$('#timerStop');
+      if(Timer.mode==='timer'){
+        var canStart = !st.running && (Timer.timerDuration|0)>0 && (Timer.timerRemaining|0)>0;
+        var canPause = st.running;
+        var canResume = !st.running && (Timer.timerDuration|0)>0 && (Timer.timerRemaining|0)>0 && ((Timer.timerDuration|0)!==(Timer.timerRemaining|0));
+        var canStop = (Timer.timerDuration|0)>0 && ((Timer.timerDuration|0)!==(Timer.timerRemaining|0));
+        if(s1) s1.style.display = canStart?'inline-block':'none';
+        if(s2) s2.style.display = canPause?'inline-block':'none';
+        if(s3) s3.style.display = canResume?'inline-block':'none';
+        if(s4) s4.style.display = canStop?'inline-block':'none';
+        // champs visibles si NON en cours
+        var ts=$('.time-setter'), pr=$('.timer-presets');
+        if(ts) ts.style.display = st.running?'none':'flex';
+        if(pr) pr.style.display = st.running?'none':'flex';
+      }else{
+        // CHRONO
+        var elapsed = (st.elapsed|0) + (st.running ? Math.floor((Date.now()-st.start)/1000) : 0);
+        var canStart = !st.running && elapsed===0;
+        var canPause = st.running;
+        var canResume = !st.running && elapsed>0;
+        var canStop = elapsed>0;
+        if(s1) s1.style.display = canStart?'inline-block':'none';
+        if(s2) s2.style.display = canPause?'inline-block':'none';
+        if(s3) s3.style.display = canResume?'inline-block':'none';
+        if(s4) s4.style.display = canStop?'inline-block':'none';
+        // cacher les champs minuteur en mode chrono
+        var ts=$('.time-setter'), pr=$('.timer-presets');
+        if(ts) ts.style.display='none';
+        if(pr) pr.style.display='none';
+      }
+
+      // Afficher panneau / pill
+      var back=$('#timerBack'); var dockWrap=$('#timerDock');
+      if(st.active){ if(back) back.style.display=st.minimized?'none':'flex'; if(dockWrap) dockWrap.style.display=st.minimized?'block':'none'; }
+      var __d=$('#timerDockBtn'); if(__d) __d.textContent=fmtHMS(displaySeconds)+'  ·  '+(st.title||'');
+    },
+    playEndSound:function(){
+      try{
+        if(!Timer.audioContext) return;
+        var ctx=Timer.audioContext;
+        function ping(t0, dur){var osc=ctx.createOscillator(); var g=ctx.createGain(); osc.connect(g); g.connect(ctx.destination); osc.frequency.value=800; g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.3,t0+0.01); g.gain.linearRampToValueAtTime(0,t0+dur); osc.start(t0); osc.stop(t0+dur);}
+        var now=ctx.currentTime;
+        ping(now,0.25); ping(now+0.35,0.25); ping(now+0.7,0.25);
+      }catch(e){}
+    },
+    openForEvent:function(ev){
+      Timer.tickStop();
+      var c=courseOf(ev);var s=subjectOf(ev);
+      Store.data.timer={active:true,evId:ev.id,courseId:ev.courseId,subjectId:(Store.data.courses.find(function(x){return x.id===ev.courseId})||{}).subjectId||null,start:0,elapsed:0,running:false,minimized:false,title:(c.name+' · J'+ev.j+' · '+ev.date),color:s.color};
+      Store.touch(); Timer.setMode('timer'); Timer.updateUI();
+      Timer.showWindowed(); var dock=$('#timerDock'); if(dock) dock.style.display='none';
+    },
+    openDirectly:function(){
+      Timer.tickStop();
+      Store.data.timer={active:true,evId:null,courseId:null,subjectId:null,start:0,elapsed:0,running:false,minimized:false,title:'Timer libre',color:'#22c55e'};
+      Store.touch(); Timer.setMode('timer'); Timer.updateUI();
+      Timer.showWindowed(); var dock=$('#timerDock'); if(dock) dock.style.display='none';
+    }
+  };
+  function on(sel,ev,fn){var el=$(sel); if(el) el.addEventListener(ev,fn)}
+  function setupDrag(){
+    var pillWrap=$('#timerDock'); var pillBtn=$('#timerDockBtn');
+    if(pillWrap&&pillBtn){makeDrag(pillWrap,pillBtn,function(rect){
+      var nearBottom=(window.innerHeight-rect.bottom)<100;
+      if(nearBottom){pillWrap.style.left='50%'; pillWrap.style.transform='translateX(-50%)'; pillWrap.style.right='auto'; pillWrap.style.top='auto'; pillWrap.style.bottom='22px'; Store.data.ui.pill={side:'bottom',offset:22};}
+      else if(rect.left+rect.width/2 < window.innerWidth/2){pillWrap.style.left='22px'; pillWrap.style.right='auto'; pillWrap.style.top=clamp(rect.top,10,window.innerHeight-rect.height-10)+'px'; pillWrap.style.bottom='auto'; pillWrap.style.transform='none'; Store.data.ui.pill={side:'left',offset:parseInt(pillWrap.style.top,10)||22};}
+      else {pillWrap.style.right='22px'; pillWrap.style.left='auto'; pillWrap.style.top=clamp(rect.top,10,window.innerHeight-rect.height-10)+'px'; pillWrap.style.bottom='auto'; pillWrap.style.transform='none'; Store.data.ui.pill={side:'right',offset:parseInt(pillWrap.style.top,10)||22};}
+      Store.touch()})}
+  }
+  function makeDrag(el,handle,onUp){
+    var sx=0,sy=0,ex=0,ey=0,drag=false;
+    function down(e){
+      var p=e.touches?e.touches[0]:e; drag=true; var r=el.getBoundingClientRect(); ex=r.left; ey=r.top; sx=p.clientX; sy=p.clientY;
+      // Disable transition and transform during drag to avoid jank
+      el.style.transition='none'; el.style.transform='none';
+      el.classList.add('dragging'); document.body.classList.add('dragging-any');
+      document.addEventListener('mousemove',move); document.addEventListener('touchmove',move,{passive:false}); document.addEventListener('mouseup',up); document.addEventListener('touchend',up)
+    }
+    function move(e){
+      if(!drag)return; var p=e.touches?e.touches[0]:e; var nx=ex+(p.clientX-sx); var ny=ey+(p.clientY-sy);
+      nx=clamp(nx,10,window.innerWidth-el.offsetWidth-10); ny=clamp(ny,10,window.innerHeight-el.offsetHeight-10);
+      el.style.left=nx+'px'; el.style.top=ny+'px'; el.style.right='auto'; el.style.bottom='auto'; if(e.cancelable) e.preventDefault()
+    }
+    function up(){
+      if(!drag)return; drag=false; el.classList.remove('dragging'); document.body.classList.remove('dragging-any');
+      // Clear inline transition so CSS can apply normally afterwards
+      el.style.transition='';
+      document.removeEventListener('mousemove',move); document.removeEventListener('touchmove',move); document.removeEventListener('mouseup',up); document.removeEventListener('touchend',up); var r=el.getBoundingClientRect(); if(onUp) onUp(r)
+    }
+    handle.addEventListener('mousedown',down); handle.addEventListener('touchstart',down,{passive:false});
+  }
+  function applyPositions(){
+    var w=Store.data.ui.timerWin; var panel=$('#timer');
+    if(panel){
+      // If saved position, apply it clamped to viewport; otherwise center
+      var ensureVisible=function(){
+        var ww=panel.offsetWidth||380, hh=panel.offsetHeight||300;
+        var maxL=Math.max(10, window.innerWidth-ww-10);
+        var maxT=Math.max(10, window.innerHeight-hh-10);
+        var left=10, top=10;
+        if(w && typeof w.left==='number' && typeof w.top==='number'){
+          left=clamp(w.left,10,maxL); top=clamp(w.top,10,maxT);
+        } else {
+          left=Math.max(10, Math.floor((window.innerWidth-ww)/2));
+          top=Math.max(10, Math.floor((window.innerHeight-hh)/2));
+        }
+        panel.style.left=left+'px'; panel.style.top=top+'px'; panel.style.right='auto'; panel.style.bottom='auto';
+      };
+      if(panel.style.display==='none'){
+        // Temporarily show to measure then restore
+        var prev=panel.style.display; var prevVis=panel.style.visibility;
+        panel.style.visibility='hidden'; panel.style.display='block'; ensureVisible();
+        panel.style.display=prev||'none'; panel.style.visibility=prevVis||'';
+      }else{
+        ensureVisible();
+      }
+    }
+    var p=Store.data.ui.pill; var d=$('#timerDock'); if(d&&p){d.style.transform='none'; if(p.side==='left'){d.style.left='22px'; d.style.right='auto'; d.style.top=(p.offset||22)+'px'; d.style.bottom='auto'} else if(p.side==='right'){d.style.right='22px'; d.style.left='auto'; d.style.top=(p.offset||22)+'px'; d.style.bottom='auto'} else {d.style.left='50%'; d.style.right='auto'; d.style.top='auto'; d.style.bottom='22px'; d.style.transform='translateX(-50%)'}}
+  }
+  function openFilters(){var fb=$('#filtersBack'); if(fb){fb.style.display='flex'; requestAnimationFrame(function(){fb.classList.add('show')}); buildFiltersUI()}}
+  function closeFilters(){var fb=$('#filtersBack'); if(fb){fb.classList.remove('show'); setTimeout(function(){fb.style.display='none'}, 200)}}
+  function buildFiltersUI(){var contS=$('#filtersSubjects');var contJ=$('#filtersJ');if(!contS||!contJ)return;contS.innerHTML='';contJ.innerHTML='';Store.data.subjects.forEach(function(s){var row=document.createElement('label');row.className='item';row.style.cursor='pointer';var chk=document.createElement('input');chk.type='checkbox';chk.checked=UI.fSubs.size?UI.fSubs.has(s.id):true;chk.onchange=function(){if(chk.checked)UI.fSubs.add(s.id);else UI.fSubs.delete(s.id);updateFilterBadge()};var chip=document.createElement('span');chip.className='chip';chip.style.background=safeColor(s.color);var name=document.createElement('span');name.style.flex='1';name.textContent=s.name;row.appendChild(chk);row.appendChild(chip);row.appendChild(name);contS.appendChild(row)});var allJ=Array.from(new Set(Store.data.events.map(function(e){return e.j})));if(!allJ.length){[0,1,2,5,7,14,30].forEach(function(v){allJ.push(v)})}allJ.sort(function(a,b){return a-b});allJ.forEach(function(j){var b=document.createElement('button');b.className='btn';b.textContent='J'+j;b.dataset.val=j;if(!UI.fJ.size||UI.fJ.has(j))b.classList.add('primary');b.onclick=function(){if(UI.fJ.has(j))UI.fJ.delete(j);else UI.fJ.add(j);b.classList.toggle('primary');updateFilterBadge()};contJ.appendChild(b)})}
+  function applyNewFilters(){closeFilters();renderAgenda()}
+  function clearFilters(){UI.fSubs.clear();UI.fJ.clear();updateFilterBadge()}
+  function allSubjects(){UI.fSubs=new Set(Store.data.subjects.map(function(s){return s.id}));updateFilterBadge()}
+  function updateFilterBadge(){var n=(UI.fSubs.size?1:0)+(UI.fJ.size?1:0);var b=$('#filterBadge');if(!b)return;if(n>0){b.style.display='inline-grid';b.textContent=String(n)}else{b.style.display='none'}}
+  function refreshFilters(){var fb=$('#filtersBack');if(fb&&fb.style.display!=='none')buildFiltersUI();updateFilterBadge()}
+  function openModal(){var m=$('#modalBack');if(m){m.style.display='flex'; requestAnimationFrame(function(){m.classList.add('show')}); var d=$('#courseDate'); if(d && !d.value) d.value=toKey(new Date()); updatePreview()}}
+  function closeModal(){var m=$('#modalBack');if(m){m.classList.remove('show'); setTimeout(function(){m.style.display='none'}, 200)}}
+  function updatePreview(){var prev=$('#preview');if(!prev)return;var nameEl=$('#courseName'); var dateEl=$('#courseDate'); var presetEl=$('#coursePreset'); var name=(nameEl&&nameEl.value?nameEl.value.trim():''); var date=(dateEl&&dateEl.value)||''; var pId=(presetEl&&presetEl.value)||''; var p=Store.data.presets.find(function(x){return x.id===pId});if(date&&p){var base=fromKey(date);var days=[0].concat(p.days);var out=days.map(function(d){return 'J'+d+' → '+toKey(addDays(base,d))}).join(' · ');prev.textContent=name?(name+' : '+out):out}else prev.textContent='Aperçu des dates des J…'}
+  function setView(v){UI.view=v;$$('#viewSeg button').forEach(function(b){b.classList.toggle('active',b.dataset.view===v)});renderAgenda()}
+  function shift(n){var d=new Date(UI.refDate);if(UI.view==='mois')d.setMonth(d.getMonth()+n);if(UI.view==='semaine')d.setDate(d.getDate()+n*7);if(UI.view==='jour'||UI.view==='liste')d.setDate(d.getDate()+n);UI.refDate=fmtDate(d);renderAgenda()}
+
+  var tip=$('#tooltip');function showTip(t,e){if(!tip)return;tip.textContent=t;tip.style.opacity=1;tip.style.transform='translateY(0)';moveTip(e)}function moveTip(e){if(!tip)return;tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY+12+'px'}function hideTip(){if(!tip)return;tip.style.opacity=0;tip.style.transform='translateY(-6px)'}window.addEventListener('mousemove',function(e){if(tip&&parseFloat(tip.style.opacity)>0)moveTip(e)});
+  function refreshAll(){renderAgenda();renderStats();refreshFilters()}
+  let contextMenuEventObj = null;
+  function openContextMenu(evObj,x,y){
+    var ctx=$('#ctx');if(!ctx)return;ctx.innerHTML='';
+    contextMenuEventObj = evObj;
+    function mk(label,cb,opts){
+      var b=document.createElement('button');
+      b.textContent=label;
+      if(opts && opts.noClose) {
+        b.onclick=function(e){
+          try{cb(e,b);}catch(e){}
+        };
+      } else {
+        b.onclick=function(e){
+          try{cb(e,b);}catch(e){}
+          closeContextMenu();
+        };
+      }
+      return b;
+    }
+    ctx.appendChild(mk(evObj.done?'Marquer non fait':'Marquer fait',function(){Model.toggleDone(evObj.id)}));
+    ctx.appendChild(mk('Renommer',function(){
+      // Ouvre le modal renommer
+      var modal = document.getElementById('renameBack');
+      var input = document.getElementById('renameInput');
+      if(modal && input){
+        input.value = courseOf(evObj).name || '';
+        modal.style.display = 'flex';
+        setTimeout(function(){modal.classList.add('show');input.focus();},10);
+      }
+    }));
+    ctx.appendChild(mk('Déplacer…',function(){
+      // Ouvre le modal déplacer
+      var modal = document.getElementById('moveBack');
+      var input = document.getElementById('moveInput');
+      if(modal && input){
+        input.value = evObj.date || '';
+        modal.style.display = 'flex';
+        setTimeout(function(){modal.classList.add('show');input.focus();},10);
+      }
+    }));
+      // Ajout bouton niveau de maîtrise
+      ctx.appendChild(mk('Niveau de maîtrise',function(e,btn){
+        // Supprime tout menu déjà ouvert
+        var old = document.getElementById('masteryMenu');
+        if(old) old.remove();
+        // Crée le menu
+        var menu = document.createElement('div');
+        menu.id = 'masteryMenu';
+        menu.style.display = 'flex';
+        menu.style.flexDirection = 'column';
+        menu.style.gap = '6px';
+        menu.style.background = '#181c28';
+        menu.style.border = '1px solid var(--border)';
+        menu.style.borderRadius = '10px';
+        menu.style.padding = '10px';
+        menu.style.position = 'fixed';
+        menu.style.zIndex = '9999';
+        var levels = [
+          {label:'Maitrisé', val:'ok', color:'#22c55e'},
+          {label:'Moyen', val:'mid', color:'#fbbf24'},
+          {label:'À revoir', val:'bad', color:'#ef4444'}
+        ];
+        var cId = courseOf(evObj).id;
+        var c = cId ? Store.data.courses.find(function(x){return x.id===cId}) : null;
+        var current = c && c.mastery;
+        levels.forEach(function(lv){
+          var b = document.createElement('button');
+          b.textContent = lv.label + (current===lv.val ? ' ✓' : '');
+          b.style.background = 'none';
+          b.style.color = lv.color;
+          b.style.fontWeight = 'bold';
+          b.style.fontSize = '15px';
+          b.style.border = '1px solid transparent';
+          b.style.borderRadius = '8px';
+          b.style.padding = '6px 10px';
+          b.onmouseenter = function(){b.style.background = lv.color+'22';};
+          b.onmouseleave = function(){b.style.background = 'none';};
+          b.onclick = function(ev){
+            ev.stopPropagation();
+            if(c){
+              c.mastery = lv.val;
+              Store.touch();
+              refreshAll();
+            }
+            menu.remove();
+            closeContextMenu();
+          };
+          menu.appendChild(b);
+        });
+        // Positionne le menu sous le bouton
+        setTimeout(function(){
+          var rect = btn ? btn.getBoundingClientRect() : {left:x, top:y, width:120, height:0};
+          var menuW = 180;
+          var menuH = 120;
+          var left = rect.left + (rect.width/2) - (menuW/2);
+          var top = rect.bottom + 8;
+          // Si trop à droite/gauche, ajuste
+          if(left < 8) left = 8;
+          if(left + menuW > window.innerWidth-8) left = window.innerWidth-menuW-8;
+          // Si trop bas, affiche au-dessus
+          if(top + menuH > window.innerHeight-8) top = rect.top - menuH - 8;
+          menu.style.left = left + 'px';
+          menu.style.top = top + 'px';
+          menu.style.width = menuW+'px';
+        },1);
+        document.body.appendChild(menu);
+        // Ferme le menu si clic ailleurs
+        setTimeout(function(){
+          function closeMenu(evn){
+            if(!menu.contains(evn.target)) menu.remove();
+            document.removeEventListener('mousedown',closeMenu);
+          }
+          document.addEventListener('mousedown',closeMenu);
+        },10);
+      }, {noClose:true}));
+    ctx.appendChild(mk('Réviser…',function(){Timer.openForEvent(evObj)}));
+    ctx.appendChild(mk('Supprimer',function(){Model.delEvent(evObj.id)}));
+    var pad=6; var w=220; var h=6*40; var left=x, top=y; if(left+w>window.innerWidth) left=window.innerWidth-w-pad; if(top+h>window.innerHeight) top=window.innerHeight-h-pad; ctx.style.left=left+'px'; ctx.style.top=top+'px'; ctx.style.display='block';
+  }
+  function closeContextMenu(){var ctx=$('#ctx'); if(ctx) ctx.style.display='none'}
+  document.addEventListener('click',function(e){var ctx=$('#ctx'); if(ctx && ctx.style.display==='block' && !(e.target.closest&&e.target.closest('#ctx'))) closeContextMenu()});
+
+  // Gestion des modals Renommer/Déplacer
+  function closeRenameModal(){
+    var modal = document.getElementById('renameBack');
+    if(modal){ modal.classList.remove('show'); setTimeout(function(){modal.style.display='none';},200); }
+  }
+  function closeMoveModal(){
+    var modal = document.getElementById('moveBack');
+    if(modal){ modal.classList.remove('show'); setTimeout(function(){modal.style.display='none';},200); }
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    // Renommer
+    var renameCancel = document.getElementById('renameCancel');
+    var renameSave = document.getElementById('renameSave');
+    if(renameCancel) renameCancel.onclick = closeRenameModal;
+    if(renameSave) renameSave.onclick = function(){
+      var input = document.getElementById('renameInput');
+      if(input && contextMenuEventObj){
+        var name = input.value.trim();
+        if(name){
+          var c=Store.data.courses.find(function(x){return x.id===contextMenuEventObj.courseId});
+          if(c){c.name=name;Store.touch();refreshAll();}
+        }
+      }
+      closeRenameModal();
+    };
+    // Déplacer
+    var moveCancel = document.getElementById('moveCancel');
+    var moveSave = document.getElementById('moveSave');
+    if(moveCancel) moveCancel.onclick = closeMoveModal;
+    if(moveSave) moveSave.onclick = function(){
+      var input = document.getElementById('moveInput');
+      if(input && contextMenuEventObj){
+        var d = input.value;
+        if(d){
+          var nd=fromKey(d);
+          if(!isNaN(nd.getTime())){
+            Model.moveEvent(contextMenuEventObj.id,nd);
+          } else {
+            alert('Date invalide. Format attendu : YYYY-MM-DD');
+          }
+        }
+      }
+      closeMoveModal();
+    };
+    // Fermer modals si clic à l'extérieur
+    document.getElementById('renameBack').addEventListener('click',function(e){if(e.target===e.currentTarget)closeRenameModal();});
+    document.getElementById('moveBack').addEventListener('click',function(e){if(e.target===e.currentTarget)closeMoveModal();});
+  });
+
+  ready(function(){
+    try{
+      console.log('App: calling Store.init()');
+      if(!Store.init || typeof Store.init !== 'function'){
+        throw new Error('Store.init is not defined');
+      }
+      Store.init().then(function(){
+        console.log('App: Store.init() resolved');
+        if(!Store.data.subjects.length){Model.addSubject({name:'Maths',color:'#22d3ee'});Model.addSubject({name:'Physique',color:'#a78bfa'})}
+        if(!Store.data.presets.length){Model.addPreset({name:'Classique 1-2-5-7-30-40',days:[1,2,5,7,30,40]});Model.addPreset({name:'Light 1-3-7-14',days:[1,3,7,14]})}
+        renderSubjects();renderPresets();refreshFilters();renderAgenda();
+        // Onglets & contrôles
+        $$('#nav .tab').forEach(function(t){t.onclick=function(){ $$('#nav .tab').forEach(function(x){x.classList.remove('active')}); t.classList.add('active'); var p=t.dataset.panel; $$('.panel').forEach(function(el){el.classList.toggle('active',el.id==='panel-'+p)}); var fab=$('.fab'); if(fab) fab.style.display=(p==='agenda')?'block':'none'; if(p==='stats'){initStatsToolbar(); setTimeout(renderStats,0);}}});
+        $$('#viewSeg button').forEach(function(b){b.onclick=function(){setView(b.dataset.view)}});
+        on('#prevBtn','click',function(){shift(-1)});
+        on('#nextBtn','click',function(){shift(1)});
+        on('#todayBtn','click',function(){UI.refDate=fmtDate(new Date());renderAgenda()});
+        on('#openTimer','click',function(){Timer.openDirectly();});
+        on('#openFilters','click',openFilters);
+        on('#filtersApply','click',function(){applyNewFilters()});
+        on('#filtersClear','click',function(){clearFilters();buildFiltersUI();renderAgenda()});
+        on('#filtersAllSubs','click',function(){allSubjects();buildFiltersUI();renderAgenda()});
+        on('#filtersBack','click',function(e){if(e.target===e.currentTarget)closeFilters()});
+        on('#modalBack','click',function(e){if(e.target===e.currentTarget)closeModal()});
+        on('#chronoSetupModal','click',function(e){if(e.target===e.currentTarget){var m=$('#chronoSetupModal'); m.classList.remove('show'); setTimeout(function(){m.style.display='none'},200)}});
+        on('#subjAdd','click',function(){var nm=$('#subjName'); var col=$('#subjColor'); var name=nm&&nm.value?nm.value.trim():''; var color=(col&&col.value)||'#4f46e5'; if(!name){alert('Nom requis');return} Model.addSubject({name:name,color:color}); if(nm) nm.value=''; if(col){ col.value='#4f46e5'; var btn=$('#subjColorBtn'); var hex=$('#subjColorHex'); if(btn) btn.style.background='#4f46e5'; if(hex) hex.textContent='#4f46e5'; } buildFiltersUI(); updateFilterBadge()});
+        on('#subjReset','click',function(){var nm=$('#subjName'); var col=$('#subjColor'); if(nm) nm.value=''; if(col){ col.value='#4f46e5'; var btn=$('#subjColorBtn'); var hex=$('#subjColorHex'); if(btn) btn.style.background='#4f46e5'; if(hex) hex.textContent='#4f46e5'; }});
+        on('#preAdd','click',function(){var nameEl=$('#preName'); var daysEl=$('#preDays'); var name=nameEl&&nameEl.value?nameEl.value.trim():''; var arr=(daysEl&&daysEl.value?daysEl.value:'').split(',').map(function(x){return parseInt(x.trim(),10)}).filter(function(x){return !isNaN(x)&&x>=0}); Model.addPreset({name:name,days:arr}); if(nameEl) nameEl.value=''; if(daysEl) daysEl.value=''});
+        on('#preReset','click',function(){var a=$('#preName'); var b=$('#preDays'); if(a) a.value=''; if(b) b.value=''});
+
+        on('#openCreate','click',openModal);
+        on('#cancelCreate','click',closeModal);
+        ['courseName','courseDate','courseSubject','coursePreset'].forEach(function(id){var el=$('#'+id); if(el) el.addEventListener('input',updatePreview)});
+        on('#createCourse','click',function(){var n=$('#courseName'); var d=$('#courseDate'); var s=$('#courseSubject'); var p=$('#coursePreset'); var name=n&&n.value?n.value.trim():'', date=d&&d.value?d.value:'', subjectId=s&&s.value?s.value:'', presetId=p&&p.value?p.value:''; if(!name||!date||!subjectId||!presetId){alert('Veuillez remplir tous les champs.');return}Model.addCourse({name:name,startDate:date,subjectId:subjectId,presetId:presetId}); if(n) n.value=''; if(d) d.value='' });
+
+        // Timer/Chrono
+        Timer.bind();
+        setupDrag(); applyPositions();
+        initStatsToolbar();
+        window.addEventListener('resize', function(){ var st=$('#panel-stats'); if(st && st.classList.contains('active')) renderStats()});
+      });
+    }catch(e){showErr('Erreur au démarrage: '+(e&&e.message?e.message:String(e)))}
+  });
+
+  function initStatsToolbar(){
+    var st=$('#statStart'); var en=$('#statEnd'); if(!st||!en||st.dataset.bound) return; var now=new Date(); var start7=toKey(addDays(now,-6)); var start30=toKey(addDays(now,-29)); var start90=toKey(addDays(now,-89)); var today=toKey(now);
+    st.value=st.value||start7; en.value=st.value?en.value:today; st.dataset.bound='1';
+    on('#statGroup','change',renderStats); on('#statChart','change',renderStats); on('#statStart','change',renderStats); on('#statEnd','change',renderStats);
+    on('#range7','click',function(){st.value=start7; en.value=today; renderStats()});
+    on('#range30','click',function(){st.value=start30; en.value=today; renderStats()});
+    on('#range90','click',function(){st.value=start90; en.value=today; renderStats()});
+    on('#rangeAll','click',function(){st.value=toKey(new Date(0)); en.value=today; renderStats()});
+    on('#exportCSV','click',function(){var sessions=collectSessions(); var rows=[["date","courseId","subjectId","seconds"]].concat(sessions.map(function(s){return [s.date,s.courseId||'',s.subjectId||'',String(secOf(s))]})); var csv=rows.map(function(r){return r.map(function(x){return '"'+String(x).replace(/"/g,'""')+'"'}).join(',')}).join('\n'); var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='sessions.csv'; a.click()});
+  }
+
+  function setStatus(m){var el=$('#saveStatus');if(el)el.textContent=m}
+  function updateFilterBadge(){} // noop to avoid errors when called before build
+  function showTip(t,e){var tip=$('#tooltip');if(!tip)return;tip.textContent=t;tip.style.opacity=1;tip.style.transform='translateY(0)';moveTip(e)}
+  function moveTip(e){var tip=$('#tooltip');if(!tip)return;tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY+12+'px'}
+
+  }catch(e){
+    console.error('Initialisation error', e);
+    try{ var b=document.getElementById('err'); if(b){ b.className='err'; b.textContent='Erreur au démarrage: '+(e && e.message?e.message:String(e)); } }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
